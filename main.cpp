@@ -51,6 +51,11 @@ struct DuckDBPlanToSubstrait {
 			sval.mutable_decimal()->push_back(1);
 			break;
 		}
+		case duckdb::LogicalTypeId::DATE: {
+			// TODO how are we going to represent dates?
+			sval.set_string(dval.ToString());
+			break;
+		}
 
 		default:
 			throw runtime_error(duckdb_type.ToString());
@@ -103,8 +108,41 @@ struct DuckDBPlanToSubstrait {
 	}
 
 	void TransformFilter(idx_t col_idx, duckdb::TableFilter &dfilter, substrait::Expression &sfilter) {
-
 		switch (dfilter.filter_type) {
+		case duckdb::TableFilterType::IS_NOT_NULL: {
+			auto &is_not_null_filter = (duckdb::IsNotNullFilter &)dfilter;
+			auto scalar_fun = sfilter.mutable_scalar_function();
+			scalar_fun->mutable_id()->set_id(RegisterFunction("is_not_null"));
+			scalar_fun->add_args()->mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(
+			    (int32_t)col_idx);
+
+			return;
+		}
+
+		case duckdb::TableFilterType::CONJUNCTION_AND: {
+			auto &conjunction_filter = (duckdb::ConjunctionAndFilter &)dfilter;
+
+			// TODO simplify this mess
+
+			substrait::Expression *conjunction_expression = nullptr;
+			for (auto &child_filter : conjunction_filter.child_filters) {
+				auto child_expression = new substrait::Expression();
+				TransformFilter(col_idx, *child_filter, *child_expression);
+				if (!conjunction_expression) {
+					conjunction_expression = child_expression;
+				} else {
+					auto temp_expr = new substrait::Expression();
+					auto scalar_fun = temp_expr->mutable_scalar_function();
+					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
+					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
+					scalar_fun->mutable_args()->AddAllocated(child_expression);
+					conjunction_expression = temp_expr;
+				}
+			}
+			sfilter = *conjunction_expression;
+
+			return;
+		}
 		case duckdb::TableFilterType::CONSTANT_COMPARISON: {
 			auto &constant_filter = (duckdb::ConstantFilter &)dfilter;
 			sfilter.mutable_scalar_function()
@@ -247,11 +285,11 @@ struct DuckDBPlanToSubstrait {
 			auto sget = sop.mutable_read();
 
 			// TODO make this work for more than one filter, yay anding-together
-			//			for (auto &filter_entry : dget.table_filters.filters) {
-			//				auto col_idx = filter_entry.first;
-			//				auto &filter = *filter_entry.second;
-			//				TransformFilter(col_idx, filter, *sget->mutable_filter());
-			//			}
+			for (auto &filter_entry : dget.table_filters.filters) {
+				auto col_idx = filter_entry.first;
+				auto &filter = *filter_entry.second;
+				TransformFilter(col_idx, filter, *sget->mutable_filter());
+			}
 
 			for (auto column_index : dget.column_ids) {
 				sget->mutable_projection()->mutable_select()->add_struct_items()->set_field((int32_t)column_index);
@@ -289,7 +327,19 @@ struct SubstraitPlanToDuckDB {
 	unique_ptr<duckdb::ParsedExpression> TransformExpr(const substrait::Expression &sexpr) {
 		switch (sexpr.rex_type_case()) {
 		case substrait::Expression::RexTypeCase::kLiteral: {
-			return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::DECIMAL(1, 1, 0));
+			auto slit = sexpr.literal();
+			switch (slit.literal_type_case()) {
+			case substrait::Expression_Literal::LiteralTypeCase::kDecimal: {
+				// TODO
+				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::DECIMAL(1, 1, 0));
+			}
+			case substrait::Expression_Literal::LiteralTypeCase::kString: {
+				// TODO lets not construct the expression everywhere ay
+				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value(slit.string()));
+			}
+			default:
+				throw runtime_error(to_string(slit.literal_type_case()));
+			}
 		}
 		case substrait::Expression::RexTypeCase::kSelection: {
 			if (!sexpr.selection().has_direct_reference() || !sexpr.selection().direct_reference().has_struct_field()) {
@@ -304,8 +354,21 @@ struct SubstraitPlanToDuckDB {
 			for (auto &sarg : sexpr.scalar_function().args()) {
 				children.push_back(TransformExpr(sarg));
 			}
-			return duckdb::make_unique<duckdb::FunctionExpression>(FindFunction(sexpr.scalar_function().id().id()),
-			                                                       move(children));
+			auto function_name = FindFunction(sexpr.scalar_function().id().id());
+			// string compare galore
+			if (function_name == "and") {
+				return duckdb::make_unique<duckdb::ConjunctionExpression>(duckdb::ExpressionType::CONJUNCTION_AND,
+				                                                          move(children));
+			}
+			if (function_name == "lessthanequal") {
+				return duckdb::make_unique<duckdb::ComparisonExpression>(
+				    duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO, move(children[0]), move(children[1]));
+			}
+			if (function_name == "is_not_null") {
+				return duckdb::make_unique<duckdb::OperatorExpression>(duckdb::ExpressionType::OPERATOR_IS_NOT_NULL,
+				                                                       move(children[0]));
+			}
+			return duckdb::make_unique<duckdb::FunctionExpression>(function_name, move(children));
 		}
 		default:
 			throw runtime_error("Unsupported expression type " + to_string(sexpr.rex_type_case()));
@@ -453,14 +516,12 @@ static void transform_plan(duckdb::Connection &con, const string &q) {
 	auto duckdb_rel = transformer_s2d.TransformOp(splan2.relations(0));
 	duckdb_rel->Print();
 	duckdb_rel->Execute()->Print();
-	//  auto res = duckdb_rel->Execute();
-	//
-	//  // check the results
-	//  std::string file_content;
-	//  std::getline(
-	//      std::ifstream("duckdb/extension/tpch/dbgen/answers/sf0.1/q01.csv"),
-	//      file_content, '\0');
-	//  printf("%s\n", duckdb::compare_csv(*res, file_content, true).c_str());
+	auto res = duckdb_rel->Execute();
+
+	// check the results
+	string file_content;
+	getline(ifstream("duckdb/extension/tpch/dbgen/answers/sf0.1/q01.csv"), file_content, '\0');
+	printf("%s\n", duckdb::compare_csv(*res, file_content, true).c_str());
 }
 
 int main() {
