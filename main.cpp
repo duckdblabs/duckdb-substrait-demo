@@ -40,10 +40,10 @@ struct DuckDBPlanToSubstrait {
 
 	idx_t last_function_id = 0;
 
-	DuckDBPlanToSubstrait(substrait::Plan &plan_p) : plan(plan_p) {
+	explicit DuckDBPlanToSubstrait(substrait::Plan &plan_p) : plan(plan_p) {
 	}
 
-	void TransformConstant(duckdb::Value &dval, substrait::Expression_Literal &sval) {
+	static void TransformConstant(duckdb::Value &dval, substrait::Expression_Literal &sval) {
 		auto &duckdb_type = dval.type();
 		switch (duckdb_type.id()) {
 		case duckdb::LogicalTypeId::DECIMAL: {
@@ -53,7 +53,7 @@ struct DuckDBPlanToSubstrait {
 		}
 
 		default:
-			throw std::runtime_error(duckdb_type.ToString());
+			throw runtime_error(duckdb_type.ToString());
 		}
 	}
 
@@ -61,7 +61,8 @@ struct DuckDBPlanToSubstrait {
 		switch (dexpr.type) {
 		case duckdb::ExpressionType::BOUND_REF: {
 			auto &dref = (duckdb::BoundReferenceExpression &)dexpr;
-			sexpr.mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(dref.index);
+			sexpr.mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(
+			    (int32_t)dref.index);
 			return;
 		}
 		case duckdb::ExpressionType::BOUND_FUNCTION: {
@@ -111,7 +112,7 @@ struct DuckDBPlanToSubstrait {
 			    ->mutable_selection()
 			    ->mutable_direct_reference()
 			    ->mutable_struct_field()
-			    ->set_field(col_idx);
+			    ->set_field((int32_t)col_idx);
 			TransformConstant(constant_filter.constant,
 			                  *sfilter.mutable_scalar_function()->add_args()->mutable_literal());
 
@@ -130,7 +131,7 @@ struct DuckDBPlanToSubstrait {
 				function_id = RegisterFunction("greaterthan");
 				break;
 			default:
-				throw std::runtime_error(duckdb::ExpressionTypeToString(constant_filter.comparison_type));
+				throw runtime_error(duckdb::ExpressionTypeToString(constant_filter.comparison_type));
 			}
 
 			sfilter.mutable_scalar_function()->mutable_id()->set_id(function_id);
@@ -155,7 +156,7 @@ struct DuckDBPlanToSubstrait {
 
 				break;
 			default:
-				throw std::runtime_error("Unsupported ordering type");
+				throw runtime_error("Unsupported ordering type");
 			}
 			break;
 		case duckdb::OrderType::DESCENDING:
@@ -170,11 +171,11 @@ struct DuckDBPlanToSubstrait {
 
 				break;
 			default:
-				throw std::runtime_error("Unsupported ordering type");
+				throw runtime_error("Unsupported ordering type");
 			}
 			break;
 		default:
-			throw std::runtime_error("Unsupported ordering type");
+			throw runtime_error("Unsupported ordering type");
 		}
 		TransformExpr(*dordf.expression, *sordf.mutable_expr());
 	}
@@ -218,21 +219,21 @@ struct DuckDBPlanToSubstrait {
 			for (auto &dgrp : daggr.groups) {
 				if (dgrp->type != duckdb::ExpressionType::BOUND_REF) {
 					// TODO push projection or push substrait to allow expressions here
-					throw std::runtime_error("No expressions in groupings yet");
+					throw runtime_error("No expressions in groupings yet");
 				}
 				auto &dref = (duckdb::BoundReferenceExpression &)*dgrp;
-				sgrp->add_input_fields(dref.index);
+				sgrp->add_input_fields((int32_t)dref.index);
 			}
 			for (auto &dmeas : daggr.expressions) {
 				auto smeas = saggr->add_measures()->mutable_measure();
 				if (dmeas->type != duckdb::ExpressionType::BOUND_AGGREGATE) {
 					// TODO push projection or push substrait, too
-					throw std::runtime_error("No non-aggregate expressions in measures yet");
+					throw runtime_error("No non-aggregate expressions in measures yet");
 				}
-				auto &daggr = (duckdb::BoundAggregateExpression &)*dmeas;
-				smeas->mutable_id()->set_id(RegisterFunction(daggr.function.name));
+				auto &daexpr = (duckdb::BoundAggregateExpression &)*dmeas;
+				smeas->mutable_id()->set_id(RegisterFunction(daexpr.function.name));
 
-				for (auto &darg : daggr.children) {
+				for (auto &darg : daexpr.children) {
 					auto sarg = smeas->add_args();
 					TransformExpr(*darg, *sarg);
 				}
@@ -253,7 +254,7 @@ struct DuckDBPlanToSubstrait {
 			//			}
 
 			for (auto column_index : dget.column_ids) {
-				sget->mutable_projection()->mutable_select()->add_struct_items()->set_field(column_index);
+				sget->mutable_projection()->mutable_select()->add_struct_items()->set_field((int32_t)column_index);
 			}
 
 			// TODO add schema
@@ -264,7 +265,7 @@ struct DuckDBPlanToSubstrait {
 		}
 
 		default:
-			throw std::runtime_error(duckdb::LogicalOperatorToString(dop.type));
+			throw runtime_error(duckdb::LogicalOperatorToString(dop.type));
 		}
 	}
 };
@@ -280,7 +281,7 @@ struct SubstraitPlanToDuckDB {
 			if (!smap.has_function_mapping()) {
 				continue;
 			}
-			auto sfmap = smap.function_mapping();
+			auto &sfmap = smap.function_mapping();
 			functions_map[sfmap.function_id().id()] = sfmap.name();
 		}
 	}
@@ -292,7 +293,7 @@ struct SubstraitPlanToDuckDB {
 		}
 		case substrait::Expression::RexTypeCase::kSelection: {
 			if (!sexpr.selection().has_direct_reference() || !sexpr.selection().direct_reference().has_struct_field()) {
-				throw std::runtime_error("Can only have direct struct references in selections");
+				throw runtime_error("Can only have direct struct references in selections");
 			}
 			return duckdb::make_unique<duckdb::PositionalReferenceExpression>(
 			    sexpr.selection().direct_reference().struct_field().field() + 1);
@@ -307,13 +308,13 @@ struct SubstraitPlanToDuckDB {
 			                                                       move(children));
 		}
 		default:
-			throw std::runtime_error("Unsupported expression type " + to_string(sexpr.rex_type_case()));
+			throw runtime_error("Unsupported expression type " + to_string(sexpr.rex_type_case()));
 		}
 	}
 
 	string FindFunction(uint64_t id) {
 		if (functions_map.find(id) == functions_map.end()) {
-			throw std::runtime_error("Could not find aggregate function " + to_string(id));
+			throw runtime_error("Could not find aggregate function " + to_string(id));
 		}
 		return functions_map[id];
 	}
@@ -341,10 +342,10 @@ struct SubstraitPlanToDuckDB {
 			dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 			break;
 		default:
-			throw std::runtime_error("Unsupported ordering " + to_string(sordf.formal()));
+			throw runtime_error("Unsupported ordering " + to_string(sordf.formal()));
 		}
 
-		return duckdb::OrderByNode(dordertype, dnullorder, TransformExpr(sordf.expr()));
+		return {dordertype, dnullorder, TransformExpr(sordf.expr())};
 	}
 
 	shared_ptr<duckdb::Relation> TransformOp(const substrait::Rel &sop) {
@@ -364,7 +365,7 @@ struct SubstraitPlanToDuckDB {
 			vector<unique_ptr<duckdb::ParsedExpression>> groups, expressions;
 
 			if (sop.aggregate().groupings_size() > 1) {
-				throw std::runtime_error("Only single grouping sets are supported for now");
+				throw runtime_error("Only single grouping sets are supported for now");
 			}
 			if (sop.aggregate().groupings_size() > 0) {
 				for (auto &input_field : sop.aggregate().groupings(0).input_fields()) {
@@ -386,9 +387,9 @@ struct SubstraitPlanToDuckDB {
 			                                                      move(expressions), move(groups));
 		}
 		case substrait::Rel::RelTypeCase::kRead: {
-			auto sget = sop.read();
+			auto &sget = sop.read();
 			if (!sget.has_named_table()) {
-				throw std::runtime_error("Can only scan named tables for now");
+				throw runtime_error("Can only scan named tables for now");
 			}
 
 			auto scan = con.Table(sop.read().named_table().names(0));
@@ -421,12 +422,12 @@ struct SubstraitPlanToDuckDB {
 			return duckdb::make_shared<duckdb::OrderRelation>(TransformOp(sop.sort().input()), move(order_nodes));
 		}
 		default:
-			throw std::runtime_error("Unsupported relation type " + to_string(sop.RelType_case()));
+			throw runtime_error("Unsupported relation type " + to_string(sop.RelType_case()));
 		}
 	}
 };
 
-static void transform_plan(duckdb::Connection &con, std::string q) {
+static void transform_plan(duckdb::Connection &con, const string &q) {
 	auto dplan = con.context->ExtractPlan(q);
 
 	printf("\n%s\n", q.c_str());
@@ -440,7 +441,7 @@ static void transform_plan(duckdb::Connection &con, std::string q) {
 
 	string serialized;
 	if (!splan.SerializeToString(&serialized)) {
-		throw std::runtime_error("eek");
+		throw runtime_error("eek");
 	}
 
 	// readback woo
