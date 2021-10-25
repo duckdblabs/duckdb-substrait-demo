@@ -323,6 +323,27 @@ struct SubstraitPlanToDuckDB {
 		duckdb::OrderType dordertype;
 		duckdb::OrderByNullType dnullorder;
 
+		switch (sordf.formal()) {
+		case substrait::Expression_SortField_SortType::Expression_SortField_SortType_ASC_NULLS_FIRST:
+			dordertype = duckdb::OrderType::ASCENDING;
+			dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
+			break;
+		case substrait::Expression_SortField_SortType::Expression_SortField_SortType_ASC_NULLS_LAST:
+			dordertype = duckdb::OrderType::ASCENDING;
+			dnullorder = duckdb::OrderByNullType::NULLS_LAST;
+			break;
+		case substrait::Expression_SortField_SortType::Expression_SortField_SortType_DESC_NULLS_FIRST:
+			dordertype = duckdb::OrderType::DESCENDING;
+			dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
+			break;
+		case substrait::Expression_SortField_SortType::Expression_SortField_SortType_DESC_NULLS_LAST:
+			dordertype = duckdb::OrderType::DESCENDING;
+			dnullorder = duckdb::OrderByNullType::NULLS_LAST;
+			break;
+		default:
+			throw std::runtime_error("Unsupported ordering " + to_string(sordf.formal()));
+		}
+
 		return duckdb::OrderByNode(dordertype, dnullorder, TransformExpr(sordf.expr()));
 	}
 
