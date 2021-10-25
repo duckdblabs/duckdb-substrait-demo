@@ -4,10 +4,10 @@ all: duckdb main
 
 clean:
 	rm -rf build
-	cd ../.. && make clean
+	cd duckdb && make clean
 
 duckdb:
-	cd duckdb && BUILD_TPCH=1 DISABLE_SANITIZER=1 make debug
+	cd duckdb && BUILD_TPCH=1 DISABLE_SANITIZER=1 make
 
 main:
 	mkdir -p build
@@ -15,3 +15,7 @@ main:
 	build/duckdb_substrait
 
 
+
+format:
+	clang-format --sort-includes=0 -style=file -i main.cpp
+	cmake-format -i CMakeLists.txt

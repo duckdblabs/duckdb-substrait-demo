@@ -9,9 +9,9 @@ include_directories(duckdb/test/include)
 
 include_directories(build)
 
-
-link_directories(duckdb/build/debug/src)
-link_directories(duckdb/build/debug/extension/tpch)
+link_directories(duckdb/build/release/src)
+link_directories(duckdb/build/release/extension/tpch)
+link_directories(duckdb/build/release/test/helpers)
 
 add_executable(duckdb_substrait main.cpp)
 target_link_libraries(duckdb_substrait duckdb)
@@ -21,8 +21,9 @@ find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})
 
 file(GLOB ProtoFiles "substrait/binary/*.proto")
-PROTOBUF_GENERATE_CPP(ProtoSources ProtoHeaders ${ProtoFiles})
+protobuf_generate_cpp(ProtoSources ProtoHeaders ${ProtoFiles})
 add_library(substrait STATIC ${ProtoSources} ${ProtoHeaders})
 
 target_link_libraries(duckdb_substrait substrait)
+target_link_libraries(duckdb_substrait test_helpers)
 target_link_libraries(duckdb_substrait ${Protobuf_LIBRARIES})
