@@ -135,6 +135,27 @@ struct DuckDBPlanToSubstrait {
 		return functions_map[name];
 	}
 
+	template <typename T, typename Func>
+	substrait::Expression *CreateConjunction(T &source, Func f) {
+		substrait::Expression *res = nullptr;
+		for (auto &ele : source) {
+			auto child_expression = new substrait::Expression();
+			f(ele, child_expression);
+			if (!res) {
+				res = child_expression;
+			} else {
+				auto temp_expr = new substrait::Expression();
+				auto scalar_fun = temp_expr->mutable_scalar_function();
+				scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
+				scalar_fun->mutable_args()->AddAllocated(res);
+				scalar_fun->mutable_args()->AddAllocated(child_expression);
+				res = temp_expr;
+			}
+		}
+
+		return res;
+	}
+
 	void TransformFilter(idx_t col_idx, duckdb::TableFilter &dfilter, substrait::Expression &sfilter) {
 		switch (dfilter.filter_type) {
 		case duckdb::TableFilterType::IS_NOT_NULL: {
@@ -150,23 +171,11 @@ struct DuckDBPlanToSubstrait {
 		case duckdb::TableFilterType::CONJUNCTION_AND: {
 			auto &conjunction_filter = (duckdb::ConjunctionAndFilter &)dfilter;
 
-			// TODO simplify this mess
-			substrait::Expression *conjunction_expression = nullptr;
-			for (auto &child_filter : conjunction_filter.child_filters) {
-				auto child_expression = new substrait::Expression();
-				TransformFilter(col_idx, *child_filter, *child_expression);
-				if (!conjunction_expression) {
-					conjunction_expression = child_expression;
-				} else {
-					auto temp_expr = new substrait::Expression();
-					auto scalar_fun = temp_expr->mutable_scalar_function();
-					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
-					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
-					scalar_fun->mutable_args()->AddAllocated(child_expression);
-					conjunction_expression = temp_expr;
-				}
-			}
-			sfilter = *conjunction_expression;
+			auto sfilter_conj = CreateConjunction(conjunction_filter.child_filters,
+			                                      [&](unique_ptr<duckdb::TableFilter> &in, substrait::Expression *out) {
+				                                      TransformFilter(col_idx, *in, *out);
+			                                      });
+			sfilter = *sfilter_conj;
 
 			return;
 		}
@@ -271,28 +280,9 @@ struct DuckDBPlanToSubstrait {
 			auto sfilter = sop.mutable_filter();
 
 			TransformOp(*dop.children[0], *sfilter->mutable_input());
-
-			// another one TODO
-			substrait::Expression *conjunction_expression = nullptr;
-
-			// TODO yet another instance of this mess, really needs genericification
-			for (auto &dcond : dfilter.expressions) {
-				auto child_expression = new substrait::Expression();
-
-				TransformExpr(*dcond, *child_expression);
-
-				if (!conjunction_expression) {
-					conjunction_expression = child_expression;
-				} else {
-					auto temp_expr = new substrait::Expression();
-					auto scalar_fun = temp_expr->mutable_scalar_function();
-					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
-					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
-					scalar_fun->mutable_args()->AddAllocated(child_expression);
-					conjunction_expression = temp_expr;
-				}
-			}
-			sfilter->set_allocated_condition(conjunction_expression);
+			sfilter->set_allocated_condition(
+			    CreateConjunction(dfilter.expressions, [&](unique_ptr<duckdb::Expression> &in,
+			                                               substrait::Expression *out) { TransformExpr(*in, *out); }));
 
 			return;
 		}
@@ -353,28 +343,12 @@ struct DuckDBPlanToSubstrait {
 			TransformOp(*dop.children[0], *sjoin->mutable_left());
 			TransformOp(*dop.children[1], *sjoin->mutable_right());
 
-			substrait::Expression *conjunction_expression = nullptr;
-
 			auto left_col_count = dop.children[0]->types.size();
 
-			// TODO yet another instance of this mess, really needs genericification
-			for (auto &dcond : djoin.conditions) {
-				auto child_expression = new substrait::Expression();
-
-				TransformJoinCond(dcond, *child_expression, left_col_count);
-
-				if (!conjunction_expression) {
-					conjunction_expression = child_expression;
-				} else {
-					auto temp_expr = new substrait::Expression();
-					auto scalar_fun = temp_expr->mutable_scalar_function();
-					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
-					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
-					scalar_fun->mutable_args()->AddAllocated(child_expression);
-					conjunction_expression = temp_expr;
-				}
-			}
-			sjoin->set_allocated_expression(conjunction_expression);
+			sjoin->set_allocated_expression(
+			    CreateConjunction(djoin.conditions, [&](duckdb::JoinCondition &in, substrait::Expression *out) {
+				    TransformJoinCond(in, *out, left_col_count);
+			    }));
 
 			switch (djoin.join_type) {
 			case duckdb::JoinType::INNER:
@@ -455,29 +429,14 @@ struct DuckDBPlanToSubstrait {
 			auto &table_scan_bind_data = (duckdb::TableScanBindData &)*dget.bind_data;
 			auto sget = sop.mutable_read();
 
-			// TODO this is duplicated make this a template?
-			substrait::Expression *conjunction_expression = nullptr;
-
-			for (auto &filter_entry : dget.table_filters.filters) {
-				auto col_idx = filter_entry.first;
-				auto &filter = *filter_entry.second;
-				auto child_expression = new substrait::Expression();
-
-				TransformFilter(col_idx, filter, *child_expression);
-
-				if (!conjunction_expression) {
-					conjunction_expression = child_expression;
-				} else {
-					auto temp_expr = new substrait::Expression();
-					auto scalar_fun = temp_expr->mutable_scalar_function();
-					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
-					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
-					scalar_fun->mutable_args()->AddAllocated(child_expression);
-					conjunction_expression = temp_expr;
-				}
-			}
-			if (conjunction_expression) {
-				sget->set_allocated_filter(conjunction_expression);
+			if (!dget.table_filters.filters.empty()) {
+				sget->set_allocated_filter(CreateConjunction(
+				    dget.table_filters.filters,
+				    [&](pair<const idx_t, unique_ptr<duckdb::TableFilter>> &in, substrait::Expression *out) {
+					    auto col_idx = in.first;
+					    auto &filter = *in.second;
+					    TransformFilter(col_idx, filter, *out);
+				    }));
 			}
 
 			for (auto column_index : dget.column_ids) {
@@ -794,15 +753,6 @@ int main() {
 	// roundtrip_tpch_plan(con, 9); // CAST
 	// roundtrip_tpch_plan(con, 10);
 
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(7));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(8));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(9));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(10));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(11));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(12));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(13));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(14));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(15));
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(16)); // mark
 	// join
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(17)); // delim
@@ -816,8 +766,6 @@ int main() {
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(22)); // mark
 	// join
 
-	// TODO translate back to duckdb plan, execute back translation, check results
-	// vs original plan
 	// TODO translate missing queries
 	// TODO optimize all delim joins away for tpch?
 }
