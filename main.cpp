@@ -47,13 +47,21 @@ struct DuckDBPlanToSubstrait {
 		auto &duckdb_type = dval.type();
 		switch (duckdb_type.id()) {
 		case duckdb::LogicalTypeId::DECIMAL: {
-			// TODO
-			sval.mutable_decimal()->push_back(1);
+			// TODO use actual decimals
+			sval.set_fp64(dval.GetValue<double>());
+			break;
+		}
+		case duckdb::LogicalTypeId::INTEGER: {
+			sval.set_i32(dval.GetValue<int32_t>());
 			break;
 		}
 		case duckdb::LogicalTypeId::DATE: {
 			// TODO how are we going to represent dates?
 			sval.set_string(dval.ToString());
+			break;
+		}
+		case duckdb::LogicalTypeId::VARCHAR: {
+			sval.set_string(dval.GetValue<string>());
 			break;
 		}
 
@@ -66,6 +74,7 @@ struct DuckDBPlanToSubstrait {
 		switch (dexpr.type) {
 		case duckdb::ExpressionType::BOUND_REF: {
 			auto &dref = (duckdb::BoundReferenceExpression &)dexpr;
+			// TODO make field ref a function, its used multiple times
 			sexpr.mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(
 			    (int32_t)dref.index);
 			return;
@@ -123,7 +132,6 @@ struct DuckDBPlanToSubstrait {
 			auto &conjunction_filter = (duckdb::ConjunctionAndFilter &)dfilter;
 
 			// TODO simplify this mess
-
 			substrait::Expression *conjunction_expression = nullptr;
 			for (auto &child_filter : conjunction_filter.child_filters) {
 				auto child_expression = new substrait::Expression();
@@ -168,6 +176,9 @@ struct DuckDBPlanToSubstrait {
 			case duckdb::ExpressionType::COMPARE_GREATERTHAN:
 				function_id = RegisterFunction("greaterthan");
 				break;
+			case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+				function_id = RegisterFunction("greaterthanequal");
+				break;
 			default:
 				throw runtime_error(duckdb::ExpressionTypeToString(constant_filter.comparison_type));
 			}
@@ -178,6 +189,21 @@ struct DuckDBPlanToSubstrait {
 		default:
 			throw runtime_error("Unsupported table filter type");
 		}
+	}
+
+	void TransformJoinCond(duckdb::JoinCondition &dcond, substrait::Expression &scond) {
+		string join_comparision;
+		switch (dcond.comparison) {
+		case duckdb::ExpressionType::COMPARE_EQUAL:
+			join_comparision = "equal";
+			break;
+		default:
+			throw runtime_error("Unsupported join comparision");
+		}
+		auto scalar_fun = scond.mutable_scalar_function();
+		scalar_fun->mutable_id()->set_id(RegisterFunction(join_comparision));
+		TransformExpr(*dcond.left, *scalar_fun->add_args());
+		TransformExpr(*dcond.right, *scalar_fun->add_args());
 	}
 
 	void TransformOrder(duckdb::BoundOrderByNode &dordf, substrait::Expression_SortField &sordf) {
@@ -221,6 +247,17 @@ struct DuckDBPlanToSubstrait {
 	void TransformOp(duckdb::LogicalOperator &dop, substrait::Rel &sop) {
 		switch (dop.type) {
 
+		case duckdb::LogicalOperatorType::LOGICAL_TOP_N: {
+			auto &dtopn = (duckdb::LogicalTopN &)dop;
+			auto stopn = sop.mutable_fetch();
+
+			TransformOp(*dop.children[0], *stopn->mutable_input());
+
+			stopn->set_offset(dtopn.offset);
+			stopn->set_count(dtopn.limit);
+			return;
+		}
+
 		case duckdb::LogicalOperatorType::LOGICAL_ORDER_BY: {
 			auto &dord = (duckdb::LogicalOrder &)dop;
 			auto sord = sop.mutable_sort();
@@ -243,6 +280,44 @@ struct DuckDBPlanToSubstrait {
 			for (auto &dexpr : dproj.expressions) {
 				auto sexpr = sproj->add_expressions();
 				TransformExpr(*dexpr, *sexpr);
+			}
+			return;
+		}
+
+		case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
+			auto &djoin = (duckdb::LogicalComparisonJoin &)dop;
+			auto sjoin = sop.mutable_join();
+
+			TransformOp(*dop.children[0], *sjoin->mutable_left());
+			TransformOp(*dop.children[1], *sjoin->mutable_right());
+
+			substrait::Expression *conjunction_expression = nullptr;
+
+			// TODO yet another instance of this mess, really needs genericification
+			for (auto &dcond : djoin.conditions) {
+				auto child_expression = new substrait::Expression();
+
+				TransformJoinCond(dcond, *child_expression);
+
+				if (!conjunction_expression) {
+					conjunction_expression = child_expression;
+				} else {
+					auto temp_expr = new substrait::Expression();
+					auto scalar_fun = temp_expr->mutable_scalar_function();
+					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
+					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
+					scalar_fun->mutable_args()->AddAllocated(child_expression);
+					conjunction_expression = temp_expr;
+				}
+			}
+			sjoin->set_allocated_expression(conjunction_expression);
+
+			switch (djoin.join_type) {
+			case duckdb::JoinType::INNER:
+				sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_INNER);
+				break;
+			default:
+				throw runtime_error("Unsupported join type");
 			}
 			return;
 		}
@@ -284,11 +359,29 @@ struct DuckDBPlanToSubstrait {
 			auto &table_scan_bind_data = (duckdb::TableScanBindData &)*dget.bind_data;
 			auto sget = sop.mutable_read();
 
-			// TODO make this work for more than one filter, yay anding-together
+			// TODO this is duplicated make this a template?
+			substrait::Expression *conjunction_expression = nullptr;
+
 			for (auto &filter_entry : dget.table_filters.filters) {
 				auto col_idx = filter_entry.first;
 				auto &filter = *filter_entry.second;
-				TransformFilter(col_idx, filter, *sget->mutable_filter());
+				auto child_expression = new substrait::Expression();
+
+				TransformFilter(col_idx, filter, *child_expression);
+
+				if (!conjunction_expression) {
+					conjunction_expression = child_expression;
+				} else {
+					auto temp_expr = new substrait::Expression();
+					auto scalar_fun = temp_expr->mutable_scalar_function();
+					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
+					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
+					scalar_fun->mutable_args()->AddAllocated(child_expression);
+					conjunction_expression = temp_expr;
+				}
+			}
+			if (conjunction_expression) {
+				sget->set_allocated_filter(conjunction_expression);
 			}
 
 			for (auto column_index : dget.column_ids) {
@@ -329,13 +422,17 @@ struct SubstraitPlanToDuckDB {
 		case substrait::Expression::RexTypeCase::kLiteral: {
 			auto slit = sexpr.literal();
 			switch (slit.literal_type_case()) {
-			case substrait::Expression_Literal::LiteralTypeCase::kDecimal: {
+			case substrait::Expression_Literal::LiteralTypeCase::kFp64: {
 				// TODO
-				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::DECIMAL(1, 1, 0));
+				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::DOUBLE(slit.fp64()));
 			}
 			case substrait::Expression_Literal::LiteralTypeCase::kString: {
 				// TODO lets not construct the expression everywhere ay
 				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value(slit.string()));
+			}
+			case substrait::Expression_Literal::LiteralTypeCase::kI32: {
+				// TODO lets not construct the expression everywhere ay
+				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::INTEGER(slit.i32()));
 			}
 			default:
 				throw runtime_error(to_string(slit.literal_type_case()));
@@ -356,13 +453,30 @@ struct SubstraitPlanToDuckDB {
 			}
 			auto function_name = FindFunction(sexpr.scalar_function().id().id());
 			// string compare galore
+			// TODO simplify this
 			if (function_name == "and") {
 				return duckdb::make_unique<duckdb::ConjunctionExpression>(duckdb::ExpressionType::CONJUNCTION_AND,
 				                                                          move(children));
 			}
+			if (function_name == "lessthan") {
+				return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_LESSTHAN,
+				                                                         move(children[0]), move(children[1]));
+			}
+			if (function_name == "equal") {
+				return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_EQUAL,
+				                                                         move(children[0]), move(children[1]));
+			}
 			if (function_name == "lessthanequal") {
 				return duckdb::make_unique<duckdb::ComparisonExpression>(
 				    duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO, move(children[0]), move(children[1]));
+			}
+			if (function_name == "greaterthanequal") {
+				return duckdb::make_unique<duckdb::ComparisonExpression>(
+				    duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO, move(children[0]), move(children[1]));
+			}
+			if (function_name == "greaterthan") {
+				return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_GREATERTHAN,
+				                                                         move(children[0]), move(children[1]));
 			}
 			if (function_name == "is_not_null") {
 				return duckdb::make_unique<duckdb::OperatorExpression>(duckdb::ExpressionType::OPERATOR_IS_NOT_NULL,
@@ -413,6 +527,25 @@ struct SubstraitPlanToDuckDB {
 
 	shared_ptr<duckdb::Relation> TransformOp(const substrait::Rel &sop) {
 		switch (sop.RelType_case()) {
+		case substrait::Rel::RelTypeCase::kJoin: {
+			auto &sjoin = sop.join();
+
+			duckdb::JoinType djointype;
+			switch (sjoin.type()) {
+			case substrait::JoinRel::JoinType::JoinRel_JoinType_INNER:
+				djointype = duckdb::JoinType::INNER;
+				break;
+			default:
+				throw runtime_error("Unsupported join type");
+			}
+			return duckdb::make_shared<duckdb::JoinRelation>(TransformOp(sjoin.left()), TransformOp(sjoin.right()),
+			                                                 TransformExpr(sjoin.expression()), djointype);
+		}
+		case substrait::Rel::RelTypeCase::kFetch: {
+			auto &slimit = sop.fetch();
+			return duckdb::make_shared<duckdb::LimitRelation>(TransformOp(slimit.input()), slimit.count(),
+			                                                  slimit.offset());
+		}
 		case substrait::Rel::RelTypeCase::kProject: {
 			vector<unique_ptr<duckdb::ParsedExpression>> expressions;
 			vector<string> aliases;
@@ -490,7 +623,8 @@ struct SubstraitPlanToDuckDB {
 	}
 };
 
-static void transform_plan(duckdb::Connection &con, const string &q) {
+static void roundtrip_tpch_plan(duckdb::Connection &con, int q_nr) {
+	auto q = duckdb::TPCHExtension::GetQuery(q_nr);
 	auto dplan = con.context->ExtractPlan(q);
 
 	printf("\n%s\n", q.c_str());
@@ -520,8 +654,13 @@ static void transform_plan(duckdb::Connection &con, const string &q) {
 
 	// check the results
 	string file_content;
-	getline(ifstream("duckdb/extension/tpch/dbgen/answers/sf0.1/q01.csv"), file_content, '\0');
-	printf("%s\n", duckdb::compare_csv(*res, file_content, true).c_str());
+	getline(ifstream(duckdb::StringUtil::Format("duckdb/extension/tpch/dbgen/answers/sf0.1/q%02d.csv", q_nr)),
+	        file_content, '\0');
+	string compare_result = duckdb::compare_csv(*res, file_content, true).c_str();
+	if (compare_result.empty()) {
+		compare_result = "OK";
+	}
+	printf("%s\n", compare_result.c_str());
 }
 
 int main() {
@@ -536,16 +675,13 @@ int main() {
 	                        // create TPC-H tables and data
 	con.Query("call dbgen(sf=0.1)");
 
-	// transform_plan(con, "SELECT l_returnflag, l_linestatus, count(*) from lineitem group by l_returnflag,
-	// l_linestatus");
-
-	transform_plan(con, duckdb::TPCHExtension::GetQuery(1));
+	roundtrip_tpch_plan(con, 1);
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(2)); // delim
 	// join
-	// transform_plan(con, duckdb::TPCHExtension::GetQuery(3));
+	roundtrip_tpch_plan(con, 3);
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(4));
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(5));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(6));
+	roundtrip_tpch_plan(con, 6);
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(7));
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(8));
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(9));
