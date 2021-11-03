@@ -70,13 +70,13 @@ struct DuckDBPlanToSubstrait {
 		}
 	}
 
-	void TransformExpr(duckdb::Expression &dexpr, substrait::Expression &sexpr) {
+	void TransformExpr(duckdb::Expression &dexpr, substrait::Expression &sexpr, idx_t col_offset = 0) {
 		switch (dexpr.type) {
 		case duckdb::ExpressionType::BOUND_REF: {
 			auto &dref = (duckdb::BoundReferenceExpression &)dexpr;
 			// TODO make field ref a function, its used multiple times
 			sexpr.mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(
-			    (int32_t)dref.index);
+			    (int32_t)dref.index + col_offset);
 			return;
 		}
 		case duckdb::ExpressionType::BOUND_FUNCTION: {
@@ -191,7 +191,7 @@ struct DuckDBPlanToSubstrait {
 		}
 	}
 
-	void TransformJoinCond(duckdb::JoinCondition &dcond, substrait::Expression &scond) {
+	void TransformJoinCond(duckdb::JoinCondition &dcond, substrait::Expression &scond, idx_t left_ncol) {
 		string join_comparision;
 		switch (dcond.comparison) {
 		case duckdb::ExpressionType::COMPARE_EQUAL:
@@ -203,7 +203,7 @@ struct DuckDBPlanToSubstrait {
 		auto scalar_fun = scond.mutable_scalar_function();
 		scalar_fun->mutable_id()->set_id(RegisterFunction(join_comparision));
 		TransformExpr(*dcond.left, *scalar_fun->add_args());
-		TransformExpr(*dcond.right, *scalar_fun->add_args());
+		TransformExpr(*dcond.right, *scalar_fun->add_args(), left_ncol);
 	}
 
 	void TransformOrder(duckdb::BoundOrderByNode &dordf, substrait::Expression_SortField &sordf) {
@@ -297,7 +297,7 @@ struct DuckDBPlanToSubstrait {
 			for (auto &dcond : djoin.conditions) {
 				auto child_expression = new substrait::Expression();
 
-				TransformJoinCond(dcond, *child_expression);
+				TransformJoinCond(dcond, *child_expression, dop.children[0]->types.size());
 
 				if (!conjunction_expression) {
 					conjunction_expression = child_expression;
