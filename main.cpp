@@ -74,9 +74,7 @@ struct DuckDBPlanToSubstrait {
 		switch (dexpr.type) {
 		case duckdb::ExpressionType::BOUND_REF: {
 			auto &dref = (duckdb::BoundReferenceExpression &)dexpr;
-			// TODO make field ref a function, its used multiple times
-			sexpr.mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(
-			    (int32_t)dref.index + col_offset);
+			CreateFieldRef(&sexpr, dref.index + col_offset);
 			return;
 		}
 		case duckdb::ExpressionType::BOUND_FUNCTION: {
@@ -156,15 +154,17 @@ struct DuckDBPlanToSubstrait {
 		return res;
 	}
 
+	void CreateFieldRef(substrait::Expression *expr, int32_t col_idx) {
+		expr->mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field((int32_t)col_idx);
+	}
+
 	void TransformFilter(idx_t col_idx, duckdb::TableFilter &dfilter, substrait::Expression &sfilter) {
 		switch (dfilter.filter_type) {
 		case duckdb::TableFilterType::IS_NOT_NULL: {
 			auto &is_not_null_filter = (duckdb::IsNotNullFilter &)dfilter;
 			auto scalar_fun = sfilter.mutable_scalar_function();
 			scalar_fun->mutable_id()->set_id(RegisterFunction("is_not_null"));
-			scalar_fun->add_args()->mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field(
-			    (int32_t)col_idx);
-
+			CreateFieldRef(scalar_fun->add_args(), col_idx);
 			return;
 		}
 
@@ -181,12 +181,8 @@ struct DuckDBPlanToSubstrait {
 		}
 		case duckdb::TableFilterType::CONSTANT_COMPARISON: {
 			auto &constant_filter = (duckdb::ConstantFilter &)dfilter;
-			sfilter.mutable_scalar_function()
-			    ->add_args()
-			    ->mutable_selection()
-			    ->mutable_direct_reference()
-			    ->mutable_struct_field()
-			    ->set_field((int32_t)col_idx);
+			CreateFieldRef(sfilter.mutable_scalar_function()->add_args(), col_idx);
+
 			TransformConstant(constant_filter.constant,
 			                  *sfilter.mutable_scalar_function()->add_args()->mutable_literal());
 
@@ -358,6 +354,7 @@ struct DuckDBPlanToSubstrait {
 				throw runtime_error("Unsupported join type");
 			}
 
+			// somewhat odd semantics on our side
 			if (djoin.left_projection_map.empty()) {
 				for (idx_t i = 0; i < dop.children[0]->types.size(); i++) {
 					djoin.left_projection_map.push_back(i);
@@ -368,27 +365,14 @@ struct DuckDBPlanToSubstrait {
 					djoin.right_projection_map.push_back(i);
 				}
 			}
-			// TODO uugly
 			for (auto left_idx : djoin.left_projection_map) {
-				sop.mutable_project()
-				    ->add_expressions()
-				    ->mutable_selection()
-				    ->mutable_direct_reference()
-				    ->mutable_struct_field()
-				    ->set_field(left_idx);
+				CreateFieldRef(sop.mutable_project()->add_expressions(), left_idx);
 			}
 
 			for (auto right_idx : djoin.right_projection_map) {
-				sop.mutable_project()
-				    ->add_expressions()
-				    ->mutable_selection()
-				    ->mutable_direct_reference()
-				    ->mutable_struct_field()
-				    ->set_field(right_idx + left_col_count);
+				CreateFieldRef(sop.mutable_project()->add_expressions(), right_idx + left_col_count);
 			}
-
 			sop.mutable_project()->set_allocated_input(sjoin_rel);
-
 			return;
 		}
 
