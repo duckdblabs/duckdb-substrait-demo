@@ -86,7 +86,7 @@ struct DuckDBPlanToSubstrait {
 
 			for (auto &darg : dfun.children) {
 				auto sarg = sfun->add_args();
-				TransformExpr(*darg, *sarg);
+				TransformExpr(*darg, *sarg, col_offset);
 			}
 
 			return;
@@ -95,6 +95,25 @@ struct DuckDBPlanToSubstrait {
 			auto &dconst = (duckdb::BoundConstantExpression &)dexpr;
 			auto sconst = sexpr.mutable_literal();
 			TransformConstant(dconst.value, *sconst);
+			return;
+		}
+		case duckdb::ExpressionType::COMPARE_LESSTHAN: {
+			auto &dcomp = (duckdb::BoundComparisonExpression &)dexpr;
+
+			auto scalar_fun = sexpr.mutable_scalar_function();
+			scalar_fun->mutable_id()->set_id(RegisterFunction("lessthan"));
+			TransformExpr(*dcomp.left, *scalar_fun->add_args(), col_offset);
+			TransformExpr(*dcomp.right, *scalar_fun->add_args(), col_offset);
+
+			return;
+		}
+		case duckdb::ExpressionType::OPERATOR_IS_NOT_NULL: {
+			auto &dop = (duckdb::BoundOperatorExpression &)dexpr;
+
+			auto scalar_fun = sexpr.mutable_scalar_function();
+			scalar_fun->mutable_id()->set_id(RegisterFunction("is_not_null"));
+			TransformExpr(*dop.children[0], *scalar_fun->add_args(), col_offset);
+
 			return;
 		}
 		default:
@@ -247,6 +266,36 @@ struct DuckDBPlanToSubstrait {
 	void TransformOp(duckdb::LogicalOperator &dop, substrait::Rel &sop) {
 		switch (dop.type) {
 
+		case duckdb::LogicalOperatorType::LOGICAL_FILTER: {
+			auto &dfilter = (duckdb::LogicalFilter &)dop;
+			auto sfilter = sop.mutable_filter();
+
+			TransformOp(*dop.children[0], *sfilter->mutable_input());
+
+			// another one TODO
+			substrait::Expression *conjunction_expression = nullptr;
+
+			// TODO yet another instance of this mess, really needs genericification
+			for (auto &dcond : dfilter.expressions) {
+				auto child_expression = new substrait::Expression();
+
+				TransformExpr(*dcond, *child_expression);
+
+				if (!conjunction_expression) {
+					conjunction_expression = child_expression;
+				} else {
+					auto temp_expr = new substrait::Expression();
+					auto scalar_fun = temp_expr->mutable_scalar_function();
+					scalar_fun->mutable_id()->set_id(RegisterFunction("and"));
+					scalar_fun->mutable_args()->AddAllocated(conjunction_expression);
+					scalar_fun->mutable_args()->AddAllocated(child_expression);
+					conjunction_expression = temp_expr;
+				}
+			}
+			sfilter->set_allocated_condition(conjunction_expression);
+
+			return;
+		}
 		case duckdb::LogicalOperatorType::LOGICAL_TOP_N: {
 			auto &dtopn = (duckdb::LogicalTopN &)dop;
 			auto stopn = sop.mutable_fetch();
@@ -255,6 +304,17 @@ struct DuckDBPlanToSubstrait {
 
 			stopn->set_offset(dtopn.offset);
 			stopn->set_count(dtopn.limit);
+			return;
+		}
+
+		case duckdb::LogicalOperatorType::LOGICAL_LIMIT: {
+			auto &dtopn = (duckdb::LogicalLimit &)dop;
+			auto stopn = sop.mutable_fetch();
+
+			TransformOp(*dop.children[0], *stopn->mutable_input());
+
+			stopn->set_offset(dtopn.offset_val);
+			stopn->set_count(dtopn.limit_val);
 			return;
 		}
 
@@ -286,18 +346,22 @@ struct DuckDBPlanToSubstrait {
 
 		case duckdb::LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
 			auto &djoin = (duckdb::LogicalComparisonJoin &)dop;
-			auto sjoin = sop.mutable_join();
+
+			auto sjoin_rel = new substrait::Rel();
+			auto sjoin = sjoin_rel->mutable_join();
 
 			TransformOp(*dop.children[0], *sjoin->mutable_left());
 			TransformOp(*dop.children[1], *sjoin->mutable_right());
 
 			substrait::Expression *conjunction_expression = nullptr;
 
+			auto left_col_count = dop.children[0]->types.size();
+
 			// TODO yet another instance of this mess, really needs genericification
 			for (auto &dcond : djoin.conditions) {
 				auto child_expression = new substrait::Expression();
 
-				TransformJoinCond(dcond, *child_expression, dop.children[0]->types.size());
+				TransformJoinCond(dcond, *child_expression, left_col_count);
 
 				if (!conjunction_expression) {
 					conjunction_expression = child_expression;
@@ -319,6 +383,38 @@ struct DuckDBPlanToSubstrait {
 			default:
 				throw runtime_error("Unsupported join type");
 			}
+
+			if (djoin.left_projection_map.empty()) {
+				for (idx_t i = 0; i < dop.children[0]->types.size(); i++) {
+					djoin.left_projection_map.push_back(i);
+				}
+			}
+			if (djoin.right_projection_map.empty()) {
+				for (idx_t i = 0; i < dop.children[1]->types.size(); i++) {
+					djoin.right_projection_map.push_back(i);
+				}
+			}
+			// TODO uugly
+			for (auto left_idx : djoin.left_projection_map) {
+				sop.mutable_project()
+				    ->add_expressions()
+				    ->mutable_selection()
+				    ->mutable_direct_reference()
+				    ->mutable_struct_field()
+				    ->set_field(left_idx);
+			}
+
+			for (auto right_idx : djoin.right_projection_map) {
+				sop.mutable_project()
+				    ->add_expressions()
+				    ->mutable_selection()
+				    ->mutable_direct_reference()
+				    ->mutable_struct_field()
+				    ->set_field(right_idx + left_col_count);
+			}
+
+			sop.mutable_project()->set_allocated_input(sjoin_rel);
+
 			return;
 		}
 
@@ -623,13 +719,9 @@ struct SubstraitPlanToDuckDB {
 	}
 };
 
-static void roundtrip_tpch_plan(duckdb::Connection &con, int q_nr) {
-	auto q = duckdb::TPCHExtension::GetQuery(q_nr);
+static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, string q) {
+
 	auto dplan = con.context->ExtractPlan(q);
-
-	printf("\n%s\n", q.c_str());
-
-	printf("\n%s\n", dplan->ToString().c_str());
 
 	substrait::Plan splan;
 	DuckDBPlanToSubstrait transformer_d2s(splan);
@@ -644,23 +736,36 @@ static void roundtrip_tpch_plan(duckdb::Connection &con, int q_nr) {
 	// readback woo
 	substrait::Plan splan2;
 	splan2.ParseFromString(serialized);
-	splan2.PrintDebugString();
 
 	SubstraitPlanToDuckDB transformer_s2d(con, splan2);
 	auto duckdb_rel = transformer_s2d.TransformOp(splan2.relations(0));
-	duckdb_rel->Print();
-	duckdb_rel->Execute()->Print();
-	auto res = duckdb_rel->Execute();
+
+	// printf("\n%s\n", dplan->ToString().c_str());
+
+	// splan2.PrintDebugString();
+
+	//	con.Query(q)->Print();
+	//
+	//	duckdb_rel->Print();
+	//	duckdb_rel->Execute()->Print();
+
+	return duckdb_rel->Execute();
+}
+
+static void roundtrip_tpch_plan(duckdb::Connection &con, int q_nr) {
+	auto q = duckdb::TPCHExtension::GetQuery(q_nr);
+
+	auto res = roundtrip_plan(con, q);
 
 	// check the results
 	string file_content;
 	getline(ifstream(duckdb::StringUtil::Format("duckdb/extension/tpch/dbgen/answers/sf0.1/q%02d.csv", q_nr)),
 	        file_content, '\0');
 	string compare_result = duckdb::compare_csv(*res, file_content, true).c_str();
-	if (compare_result.empty()) {
-		compare_result = "OK";
+	if (!compare_result.empty()) {
+		printf("%s\n", compare_result.c_str());
+		throw runtime_error("result compare failure");
 	}
-	printf("%s\n", compare_result.c_str());
 }
 
 int main() {
@@ -675,13 +780,20 @@ int main() {
 	                        // create TPC-H tables and data
 	con.Query("call dbgen(sf=0.1)");
 
+	// roundtrip_plan(con, "SELECT n_name, r_name FROM nation join region ON n_regionkey = r_regionkey limit 10");
+	// return 0;
 	roundtrip_tpch_plan(con, 1);
-	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(2)); // delim
+	// roundtrip_tpch_plan(con, 2);// delim
 	// join
-	roundtrip_tpch_plan(con, 3);
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(4));
-	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(5));
+	// roundtrip_tpch_plan(con, 3); ??
+	//  roundtrip_tpch_plan(con, 4); // SEMI join not supported in Substrait
+	roundtrip_tpch_plan(con, 5);
 	roundtrip_tpch_plan(con, 6);
+	//  roundtrip_tpch_plan(con, 7); // OR
+	// roundtrip_tpch_plan(con, 8); // CASE
+	// roundtrip_tpch_plan(con, 9); // CAST
+	// roundtrip_tpch_plan(con, 10);
+
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(7));
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(8));
 	//	transform_plan(con, duckdb::TPCHExtension::GetQuery(9));
