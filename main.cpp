@@ -460,22 +460,24 @@ struct SubstraitPlanToDuckDB {
 		switch (sexpr.rex_type_case()) {
 		case substrait::Expression::RexTypeCase::kLiteral: {
 			auto slit = sexpr.literal();
+			duckdb::Value dval;
 			switch (slit.literal_type_case()) {
-			case substrait::Expression_Literal::LiteralTypeCase::kFp64: {
-				// TODO
-				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::DOUBLE(slit.fp64()));
-			}
-			case substrait::Expression_Literal::LiteralTypeCase::kString: {
-				// TODO lets not construct the expression everywhere ay
-				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value(slit.string()));
-			}
-			case substrait::Expression_Literal::LiteralTypeCase::kI32: {
-				// TODO lets not construct the expression everywhere ay
-				return duckdb::make_unique<duckdb::ConstantExpression>(duckdb::Value::INTEGER(slit.i32()));
-			}
+			case substrait::Expression_Literal::LiteralTypeCase::kFp64:
+				dval = duckdb::Value::DOUBLE(slit.fp64());
+				break;
+
+			case substrait::Expression_Literal::LiteralTypeCase::kString:
+				dval = duckdb::Value(slit.string());
+				break;
+
+			case substrait::Expression_Literal::LiteralTypeCase::kI32:
+				dval = duckdb::Value::INTEGER(slit.i32());
+				break;
+
 			default:
 				throw runtime_error(to_string(slit.literal_type_case()));
 			}
+			return duckdb::make_unique<duckdb::ConstantExpression>(dval);
 		}
 		case substrait::Expression::RexTypeCase::kSelection: {
 			if (!sexpr.selection().has_direct_reference() || !sexpr.selection().direct_reference().has_struct_field()) {
