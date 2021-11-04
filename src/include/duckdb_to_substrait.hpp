@@ -55,7 +55,7 @@ private:
 		}
 
 		return res;
-	};
+	}
 
 	io::substrait::Plan &plan;
 	std::unordered_map<std::string, uint64_t> functions_map;
