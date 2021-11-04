@@ -3,6 +3,8 @@ project(duckdb_substrait)
 
 set(CMAKE_CXX_STANDARD 11)
 
+include_directories(src/include)
+
 include_directories(duckdb/src/include)
 include_directories(duckdb/extension/tpch/include)
 include_directories(duckdb/test/include)
@@ -13,7 +15,8 @@ link_directories(duckdb/build/release/src)
 link_directories(duckdb/build/release/extension/tpch)
 link_directories(duckdb/build/release/test/helpers)
 
-add_executable(duckdb_substrait main.cpp)
+add_executable(duckdb_substrait main.cpp src/duckdb_to_substrait.cpp
+                                src/substrait_to_duckdb.cpp)
 target_link_libraries(duckdb_substrait duckdb)
 target_link_libraries(duckdb_substrait tpch_extension)
 

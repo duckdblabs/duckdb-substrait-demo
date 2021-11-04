@@ -17,5 +17,5 @@ main:
 
 
 format:
-	clang-format --sort-includes=0 -style=file -i main.cpp
+	clang-format --sort-includes=0 -style=file -i main.cpp src/*.cpp src/include/*.hpp
 	cmake-format -i CMakeLists.txt
