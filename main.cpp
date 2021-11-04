@@ -86,10 +86,10 @@ int main() {
 	//  roundtrip_tpch_plan(con, 4); // SEMI join not supported in Substrait
 	roundtrip_tpch_plan(con, 5);
 	roundtrip_tpch_plan(con, 6);
-	//  roundtrip_tpch_plan(con, 7); // OR
-	// roundtrip_tpch_plan(con, 8); // CASE
-	// roundtrip_tpch_plan(con, 9); // CAST
-	// roundtrip_tpch_plan(con, 10);
+	roundtrip_tpch_plan(con, 7); // OR
+	                             // roundtrip_tpch_plan(con, 8); // CASE
+	                             // roundtrip_tpch_plan(con, 9); // CAST
+	                             // roundtrip_tpch_plan(con, 10);
 
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(16)); // mark
 	// join

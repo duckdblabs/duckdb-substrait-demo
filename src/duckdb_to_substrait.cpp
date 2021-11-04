@@ -72,13 +72,48 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		TransformConstant(dconst.value, *sconst);
 		return;
 	}
+	case duckdb::ExpressionType::COMPARE_EQUAL:
 	case duckdb::ExpressionType::COMPARE_LESSTHAN: {
 		auto &dcomp = (duckdb::BoundComparisonExpression &)dexpr;
 
+		string fname;
+		switch (dexpr.type) {
+		case duckdb::ExpressionType::COMPARE_EQUAL:
+			fname = "equal";
+			break;
+		case duckdb::ExpressionType::COMPARE_LESSTHAN:
+			fname = "lessthan";
+			break;
+		default:
+			throw runtime_error(duckdb::ExpressionTypeToString(dexpr.type));
+		}
+
 		auto scalar_fun = sexpr.mutable_scalar_function();
-		scalar_fun->mutable_id()->set_id(RegisterFunction("lessthan"));
+		scalar_fun->mutable_id()->set_id(RegisterFunction(fname));
 		TransformExpr(*dcomp.left, *scalar_fun->add_args(), col_offset);
 		TransformExpr(*dcomp.right, *scalar_fun->add_args(), col_offset);
+
+		return;
+	}
+	case duckdb::ExpressionType::CONJUNCTION_AND:
+	case duckdb::ExpressionType::CONJUNCTION_OR: {
+		auto &dconj = (duckdb::BoundConjunctionExpression &)dexpr;
+		string fname;
+		switch (dexpr.type) {
+		case duckdb::ExpressionType::CONJUNCTION_AND:
+			fname = "and";
+			break;
+		case duckdb::ExpressionType::CONJUNCTION_OR:
+			fname = "or";
+			break;
+		default:
+			throw runtime_error(duckdb::ExpressionTypeToString(dexpr.type));
+		}
+
+		auto scalar_fun = sexpr.mutable_scalar_function();
+		scalar_fun->mutable_id()->set_id(RegisterFunction(fname));
+		TransformExpr(*dconj.children[0], *scalar_fun->add_args(), col_offset);
+		TransformExpr(*dconj.children[1], *scalar_fun->add_args(), col_offset);
 
 		return;
 	}
@@ -118,7 +153,6 @@ void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &d
                                         substrait::Expression &sfilter) {
 	switch (dfilter.filter_type) {
 	case duckdb::TableFilterType::IS_NOT_NULL: {
-		auto &is_not_null_filter = (duckdb::IsNotNullFilter &)dfilter;
 		auto scalar_fun = sfilter.mutable_scalar_function();
 		scalar_fun->mutable_id()->set_id(RegisterFunction("is_not_null"));
 		CreateFieldRef(scalar_fun->add_args(), col_idx);
@@ -226,13 +260,28 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 
 	case duckdb::LogicalOperatorType::LOGICAL_FILTER: {
 		auto &dfilter = (duckdb::LogicalFilter &)dop;
-		auto sfilter = sop.mutable_filter();
+		auto res = new substrait::Rel();
 
-		TransformOp(*dop.children[0], *sfilter->mutable_input());
-		sfilter->set_allocated_condition(
-		    CreateConjunction(dfilter.expressions, [&](unique_ptr<duckdb::Expression> &in, substrait::Expression *out) {
-			    TransformExpr(*in, *out);
-		    }));
+		TransformOp(*dop.children[0], *res);
+
+		if (!dfilter.expressions.empty()) {
+			auto filter = new substrait::Rel();
+			filter->mutable_filter()->set_allocated_input(res);
+			filter->mutable_filter()->set_allocated_condition(
+			    CreateConjunction(dfilter.expressions, [&](unique_ptr<duckdb::Expression> &in,
+			                                               substrait::Expression *out) { TransformExpr(*in, *out); }));
+			res = filter;
+		}
+
+		if (!dfilter.projection_map.empty()) {
+			auto projection = new substrait::Rel();
+			projection->mutable_project()->set_allocated_input(res);
+			for (auto col_idx : dfilter.projection_map) {
+				CreateFieldRef(projection->mutable_project()->add_expressions(), col_idx);
+			}
+			res = projection;
+		}
+		sop = *res;
 
 		return;
 	}

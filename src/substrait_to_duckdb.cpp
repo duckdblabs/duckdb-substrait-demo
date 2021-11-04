@@ -69,6 +69,10 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 			return duckdb::make_unique<duckdb::ConjunctionExpression>(duckdb::ExpressionType::CONJUNCTION_AND,
 			                                                          move(children));
 		}
+		if (function_name == "or") {
+			return duckdb::make_unique<duckdb::ConjunctionExpression>(duckdb::ExpressionType::CONJUNCTION_OR,
+			                                                          move(children));
+		}
 		if (function_name == "lessthan") {
 			return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_LESSTHAN,
 			                                                         move(children[0]), move(children[1]));
@@ -149,12 +153,18 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 		default:
 			throw runtime_error("Unsupported join type");
 		}
-		return duckdb::make_shared<duckdb::JoinRelation>(TransformOp(sjoin.left()), TransformOp(sjoin.right()),
+		return duckdb::make_shared<duckdb::JoinRelation>(TransformOp(sjoin.left())->Alias("left"),
+		                                                 TransformOp(sjoin.right())->Alias("right"),
 		                                                 TransformExpr(sjoin.expression()), djointype);
 	}
 	case substrait::Rel::RelTypeCase::kFetch: {
 		auto &slimit = sop.fetch();
 		return duckdb::make_shared<duckdb::LimitRelation>(TransformOp(slimit.input()), slimit.count(), slimit.offset());
+	}
+	case substrait::Rel::RelTypeCase::kFilter: {
+		auto &sfilter = sop.filter();
+		return duckdb::make_shared<duckdb::FilterRelation>(TransformOp(sfilter.input()),
+		                                                   TransformExpr(sfilter.condition()));
 	}
 	case substrait::Rel::RelTypeCase::kProject: {
 		vector<unique_ptr<duckdb::ParsedExpression>> expressions;

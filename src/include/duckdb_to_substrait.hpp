@@ -14,10 +14,10 @@ class Rel;
 namespace duckdb {
 class TableFilter;
 class LogicalOperator;
-class BoundOrderByNode;
+struct BoundOrderByNode;
 class Value;
 class Expression;
-class JoinCondition;
+struct JoinCondition;
 } // namespace duckdb
 
 class DuckDBToSubstrait {

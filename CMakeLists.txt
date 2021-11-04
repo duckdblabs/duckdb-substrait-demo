@@ -3,6 +3,10 @@ project(duckdb_substrait)
 
 set(CMAKE_CXX_STANDARD 11)
 
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+  add_compile_options(-Wall -Werror -pedantic -fsanitize=address)
+endif()
+
 include_directories(src/include)
 
 include_directories(duckdb/src/include)
@@ -19,6 +23,10 @@ add_executable(duckdb_substrait main.cpp src/duckdb_to_substrait.cpp
                                 src/substrait_to_duckdb.cpp)
 target_link_libraries(duckdb_substrait duckdb)
 target_link_libraries(duckdb_substrait tpch_extension)
+
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+  target_link_libraries(duckdb_substrait -fsanitize=address)
+endif()
 
 find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})

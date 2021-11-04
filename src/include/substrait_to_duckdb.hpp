@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <memory>
 
 namespace io {
 namespace substrait {
@@ -15,7 +16,7 @@ class Rel;
 namespace duckdb {
 class ParsedExpression;
 class Connection;
-class OrderByNode;
+struct OrderByNode;
 class Relation;
 } // namespace duckdb
 
