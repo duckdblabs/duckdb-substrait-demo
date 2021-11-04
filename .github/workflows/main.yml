@@ -10,6 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Install
+        run: sudo apt-get update -y -qq && sudo apt-get install -y -qq protobuf
 
     - name: Update submodules
       run: |
