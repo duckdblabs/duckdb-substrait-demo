@@ -1,0 +1,20 @@
+on: [push, pull_request]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Linux Integration
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Update submodules
+      run: |
+        git submodule init
+        git submodule update --remote --merge
+
+    - name: Build and test
+      run: make
