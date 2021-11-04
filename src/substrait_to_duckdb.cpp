@@ -150,6 +150,9 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 		case substrait::JoinRel::JoinType::JoinRel_JoinType_INNER:
 			djointype = duckdb::JoinType::INNER;
 			break;
+		case substrait::JoinRel::JoinType::JoinRel_JoinType_LEFT:
+			djointype = duckdb::JoinType::LEFT;
+			break;
 		default:
 			throw runtime_error("Unsupported join type");
 		}

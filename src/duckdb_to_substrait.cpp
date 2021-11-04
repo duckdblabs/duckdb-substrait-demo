@@ -353,6 +353,9 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		case duckdb::JoinType::INNER:
 			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_INNER);
 			break;
+		case duckdb::JoinType::LEFT:
+			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_LEFT);
+			break;
 		default:
 			throw runtime_error("Unsupported join type");
 		}
