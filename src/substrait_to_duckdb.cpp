@@ -9,6 +9,7 @@
 #include "duckdb/main/relation/filter_relation.hpp"
 #include "duckdb/main/relation/order_relation.hpp"
 #include "duckdb/main/connection.hpp"
+#include "duckdb/parser/parser.hpp"
 
 #include "plan.pb.h"
 
@@ -68,6 +69,13 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		if (function_name == "and") {
 			return duckdb::make_unique<duckdb::ConjunctionExpression>(duckdb::ExpressionType::CONJUNCTION_AND,
 			                                                          move(children));
+		}
+		if (function_name == "cast") {
+			// TODO actually unpack the constant expression here and not rely on ToString
+			auto expr =
+			    duckdb::Parser::ParseExpressionList(duckdb::StringUtil::Format("asdf::%s", children[1]->ToString()));
+			auto &cast = (duckdb::CastExpression &)*expr[0];
+			return duckdb::make_unique<duckdb::CastExpression>(cast.cast_type, move(children[0]));
 		}
 		if (function_name == "or") {
 			return duckdb::make_unique<duckdb::ConjunctionExpression>(duckdb::ExpressionType::CONJUNCTION_OR,

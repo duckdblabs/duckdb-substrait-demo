@@ -54,6 +54,14 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		CreateFieldRef(&sexpr, dref.index + col_offset);
 		return;
 	}
+	case duckdb::ExpressionType::OPERATOR_CAST: {
+		auto &dcast = (duckdb::BoundCastExpression &)dexpr;
+		auto sfun = sexpr.mutable_scalar_function();
+		sfun->mutable_id()->set_id(RegisterFunction("cast"));
+		TransformExpr(*dcast.child, *sfun->add_args(), col_offset);
+		sfun->add_args()->mutable_literal()->set_string(dcast.return_type.ToString());
+		return;
+	}
 	case duckdb::ExpressionType::BOUND_FUNCTION: {
 		auto &dfun = (duckdb::BoundFunctionExpression &)dexpr;
 		auto sfun = sexpr.mutable_scalar_function();
@@ -211,6 +219,9 @@ void DuckDBToSubstrait::TransformJoinCond(duckdb::JoinCondition &dcond, substrai
 	switch (dcond.comparison) {
 	case duckdb::ExpressionType::COMPARE_EQUAL:
 		join_comparision = "equal";
+		break;
+	case duckdb::ExpressionType::COMPARE_GREATERTHAN:
+		join_comparision = "greatherthan";
 		break;
 	default:
 		throw runtime_error("Unsupported join comparision");

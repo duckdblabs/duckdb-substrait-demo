@@ -88,13 +88,13 @@ int main() {
 	roundtrip_tpch_plan(con, 6);
 	roundtrip_tpch_plan(con, 7);
 	// roundtrip_tpch_plan(con, 8); // CASE
-	// roundtrip_tpch_plan(con, 9); // CAST
-    // roundtrip_tpch_plan(con, 10); // ?
-	// roundtrip_tpch_plan(con, 11); // CAST
+	roundtrip_tpch_plan(con, 9);
+	// roundtrip_tpch_plan(con, 10); // ?
+	// roundtrip_tpch_plan(con, 11); // ?
 	// roundtrip_tpch_plan(con, 12); // CASE
-	roundtrip_tpch_plan(con, 13);
-	//roundtrip_tpch_plan(con, 14); // CASE
-	//roundtrip_tpch_plan(con, 15); // ??
+	// roundtrip_tpch_plan(con, 13); // join comparision
+	// roundtrip_tpch_plan(con, 14); // CASE
+	// roundtrip_tpch_plan(con, 15); // ??
 
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(16)); // mark
 	// join
@@ -109,7 +109,7 @@ int main() {
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(22)); // mark
 	// join
 
-    // TODO CASE and CAST SwitchExpression
+	// TODO CASE -> SwitchExpression
 	// TODO translate missing queries
 	// TODO optimize all delim joins away for tpch?
 }
