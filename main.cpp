@@ -29,6 +29,7 @@ static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, s
 	if (!splan.SerializeToString(&serialized)) {
 		throw runtime_error("eek");
 	}
+	splan.Clear();
 
 	// readback woo
 	substrait::Plan splan2;
@@ -36,6 +37,7 @@ static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, s
 
 	SubstraitToDuckDB transformer_s2d(con, splan2);
 	auto duckdb_rel = transformer_s2d.TransformOp(splan2.relations(0));
+	splan2.Clear();
 
 	// printf("\n%s\n", dplan->ToString().c_str());
 
@@ -112,4 +114,5 @@ int main() {
 	// TODO CASE -> SwitchExpression
 	// TODO translate missing queries
 	// TODO optimize all delim joins away for tpch?
+	google::protobuf::ShutdownProtobufLibrary();
 }
