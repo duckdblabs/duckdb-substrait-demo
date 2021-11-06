@@ -81,7 +81,12 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		return;
 	}
 	case duckdb::ExpressionType::COMPARE_EQUAL:
-	case duckdb::ExpressionType::COMPARE_LESSTHAN: {
+	case duckdb::ExpressionType::COMPARE_LESSTHAN:
+	case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
+	case duckdb::ExpressionType::COMPARE_GREATERTHAN:
+	case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+
+	{
 		auto &dcomp = (duckdb::BoundComparisonExpression &)dexpr;
 
 		string fname;
@@ -91,6 +96,15 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 			break;
 		case duckdb::ExpressionType::COMPARE_LESSTHAN:
 			fname = "lessthan";
+			break;
+		case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
+			fname = "lessthanequal";
+			break;
+		case duckdb::ExpressionType::COMPARE_GREATERTHAN:
+			fname = "greatherthan";
+			break;
+		case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+			fname = "greaterthanequal";
 			break;
 		default:
 			throw runtime_error(duckdb::ExpressionTypeToString(dexpr.type));
@@ -300,8 +314,15 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		auto &dtopn = (duckdb::LogicalTopN &)dop;
 		auto stopn = sop.mutable_fetch();
 
-		TransformOp(*dop.children[0], *stopn->mutable_input());
+		auto sord_rel = new substrait::Rel();
+		auto sord = sord_rel->mutable_sort();
+		TransformOp(*dop.children[0], *sord->mutable_input());
 
+		for (auto &dordf : dtopn.orders) {
+			TransformOrder(dordf, *sord->add_sorts());
+		}
+
+		stopn->set_allocated_input(sord_rel);
 		stopn->set_offset(dtopn.offset);
 		stopn->set_count(dtopn.limit);
 		return;
@@ -325,8 +346,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		TransformOp(*dop.children[0], *sord->mutable_input());
 
 		for (auto &dordf : dord.orders) {
-			auto sordf = sord->add_sorts();
-			TransformOrder(dordf, *sordf);
+			TransformOrder(dordf, *sord->add_sorts());
 		}
 		return;
 	}
@@ -338,8 +358,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		TransformOp(*dop.children[0], *sproj->mutable_input());
 
 		for (auto &dexpr : dproj.expressions) {
-			auto sexpr = sproj->add_expressions();
-			TransformExpr(*dexpr, *sexpr);
+			TransformExpr(*dexpr, *sproj->add_expressions());
 		}
 		return;
 	}
@@ -418,8 +437,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 			smeas->mutable_id()->set_id(RegisterFunction(daexpr.function.name));
 
 			for (auto &darg : daexpr.children) {
-				auto sarg = smeas->add_args();
-				TransformExpr(*darg, *sarg);
+				TransformExpr(*darg, *smeas->add_args());
 			}
 		}
 		return;

@@ -39,14 +39,16 @@ static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, s
 	auto duckdb_rel = transformer_s2d.TransformOp(splan2.relations(0));
 	splan2.Clear();
 
-	// printf("\n%s\n", dplan->ToString().c_str());
+	//	printf("\n%s\n", dplan->ToString().c_str());
 
 	// splan2.PrintDebugString();
 
 	//	con.Query(q)->Print();
 	//
-	//	duckdb_rel->Print();
-	//	duckdb_rel->Execute()->Print();
+	//		duckdb_rel->Print();
+	//	    duckdb_rel->Explain()->Print();
+	//
+	//    duckdb_rel->Execute()->Print();
 
 	return duckdb_rel->Execute();
 }
@@ -79,24 +81,24 @@ int main() {
 	                        // create TPC-H tables and data
 	con.Query("call dbgen(sf=0.1)");
 
-	// roundtrip_plan(con, "SELECT n_name, r_name FROM nation join region ON n_regionkey = r_regionkey limit 10");
-	// return 0;
 	roundtrip_tpch_plan(con, 1);
 	// roundtrip_tpch_plan(con, 2);// delim
 	// join
-	// roundtrip_tpch_plan(con, 3); ??
+	roundtrip_tpch_plan(con, 3);
 	//  roundtrip_tpch_plan(con, 4); // SEMI join not supported in Substrait
 	roundtrip_tpch_plan(con, 5);
 	roundtrip_tpch_plan(con, 6);
 	roundtrip_tpch_plan(con, 7);
 	// roundtrip_tpch_plan(con, 8); // CASE
 	roundtrip_tpch_plan(con, 9);
-	// roundtrip_tpch_plan(con, 10); // ?
+	roundtrip_tpch_plan(con, 10);
 	// roundtrip_tpch_plan(con, 11); // ?
 	// roundtrip_tpch_plan(con, 12); // CASE
-	// roundtrip_tpch_plan(con, 13); // join comparision
+	roundtrip_tpch_plan(con, 13);
 	// roundtrip_tpch_plan(con, 14); // CASE
 	// roundtrip_tpch_plan(con, 15); // ??
+
+	//    roundtrip_tpch_plan(con, 19); // ??
 
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(16)); // mark
 	// join
