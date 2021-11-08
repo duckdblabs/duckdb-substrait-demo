@@ -89,13 +89,13 @@ int main() {
 	roundtrip_tpch_plan(con, 5);
 	roundtrip_tpch_plan(con, 6);
 	roundtrip_tpch_plan(con, 7);
-	// roundtrip_tpch_plan(con, 8); // CASE
+	roundtrip_tpch_plan(con, 8); // CASE
 	roundtrip_tpch_plan(con, 9);
 	roundtrip_tpch_plan(con, 10);
 	// roundtrip_tpch_plan(con, 11); // ?
-	// roundtrip_tpch_plan(con, 12); // CASE
+	roundtrip_tpch_plan(con, 12); // CASE
 	roundtrip_tpch_plan(con, 13);
-	// roundtrip_tpch_plan(con, 14); // CASE
+	roundtrip_tpch_plan(con, 14); // CASE
 	// roundtrip_tpch_plan(con, 15); // ??
 
 	//    roundtrip_tpch_plan(con, 19); // ??

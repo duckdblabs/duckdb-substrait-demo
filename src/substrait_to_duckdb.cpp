@@ -89,6 +89,10 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 			return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_EQUAL,
 			                                                         move(children[0]), move(children[1]));
 		}
+		if (function_name == "notequal") {
+			return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_NOTEQUAL,
+			                                                         move(children[0]), move(children[1]));
+		}
 		if (function_name == "lessthanequal") {
 			return duckdb::make_unique<duckdb::ComparisonExpression>(duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO,
 			                                                         move(children[0]), move(children[1]));
@@ -107,6 +111,19 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		}
 		return duckdb::make_unique<duckdb::FunctionExpression>(function_name, move(children));
 	}
+	case substrait::Expression::RexTypeCase::kIfThen: {
+		auto scase = sexpr.if_then();
+
+		auto dcase = duckdb::make_unique<duckdb::CaseExpression>();
+		for (auto sif : scase.ifs()) {
+			duckdb::CaseCheck dif;
+			dif.when_expr = TransformExpr(sif.if_());
+			dif.then_expr = TransformExpr(sif.then());
+			dcase->case_checks.push_back(move(dif));
+		}
+		dcase->else_expr = TransformExpr(scase.else_());
+		return dcase;
+	}
 	default:
 		throw runtime_error("Unsupported expression type " + to_string(sexpr.rex_type_case()));
 	}
@@ -124,25 +141,25 @@ duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::Expressio
 	duckdb::OrderType dordertype;
 	duckdb::OrderByNullType dnullorder;
 
-	switch (sordf.formal()) {
-	case substrait::Expression_SortField_SortType::Expression_SortField_SortType_ASC_NULLS_FIRST:
+	switch (sordf.direction()) {
+	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::Expression_SortField_SortType::Expression_SortField_SortType_ASC_NULLS_LAST:
+	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_LAST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
-	case substrait::Expression_SortField_SortType::Expression_SortField_SortType_DESC_NULLS_FIRST:
+	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::Expression_SortField_SortType::Expression_SortField_SortType_DESC_NULLS_LAST:
+	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_LAST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
 	default:
-		throw runtime_error("Unsupported ordering " + to_string(sordf.formal()));
+		throw runtime_error("Unsupported ordering " + to_string(sordf.direction()));
 	}
 
 	return {dordertype, dnullorder, TransformExpr(sordf.expr())};

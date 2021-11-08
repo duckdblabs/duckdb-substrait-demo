@@ -85,6 +85,7 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 	case duckdb::ExpressionType::COMPARE_LESSTHANOREQUALTO:
 	case duckdb::ExpressionType::COMPARE_GREATERTHAN:
 	case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
+	case duckdb::ExpressionType::COMPARE_NOTEQUAL:
 
 	{
 		auto &dcomp = (duckdb::BoundComparisonExpression &)dexpr;
@@ -105,6 +106,9 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 			break;
 		case duckdb::ExpressionType::COMPARE_GREATERTHANOREQUALTO:
 			fname = "greaterthanequal";
+			break;
+		case duckdb::ExpressionType::COMPARE_NOTEQUAL:
+			fname = "notequal";
 			break;
 		default:
 			throw runtime_error(duckdb::ExpressionTypeToString(dexpr.type));
@@ -148,6 +152,18 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 
 		return;
 	}
+	case duckdb::ExpressionType::CASE_EXPR: {
+		auto &dcase = (duckdb::BoundCaseExpression &)dexpr;
+		auto scase = sexpr.mutable_if_then();
+
+		auto sif = scase->mutable_ifs()->Add();
+		TransformExpr(*dcase.check, *sif->mutable_if_());
+		TransformExpr(*dcase.result_if_true, *sif->mutable_then());
+		TransformExpr(*dcase.result_if_false, *scase->mutable_else_());
+
+		return;
+	}
+
 	default:
 		throw runtime_error(duckdb::ExpressionTypeToString(dexpr.type));
 	}
@@ -251,10 +267,12 @@ void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrai
 	case duckdb::OrderType::ASCENDING:
 		switch (dordf.null_order) {
 		case duckdb::OrderByNullType::NULLS_FIRST:
-			sordf.set_formal(substrait::Expression_SortField_SortType::Expression_SortField_SortType_ASC_NULLS_FIRST);
+			sordf.set_direction(
+			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_FIRST);
 			break;
 		case duckdb::OrderByNullType::NULLS_LAST:
-			sordf.set_formal(substrait::Expression_SortField_SortType::Expression_SortField_SortType_ASC_NULLS_LAST);
+			sordf.set_direction(
+			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_LAST);
 
 			break;
 		default:
@@ -264,10 +282,12 @@ void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrai
 	case duckdb::OrderType::DESCENDING:
 		switch (dordf.null_order) {
 		case duckdb::OrderByNullType::NULLS_FIRST:
-			sordf.set_formal(substrait::Expression_SortField_SortType::Expression_SortField_SortType_DESC_NULLS_FIRST);
+			sordf.set_direction(
+			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_FIRST);
 			break;
 		case duckdb::OrderByNullType::NULLS_LAST:
-			sordf.set_formal(substrait::Expression_SortField_SortType::Expression_SortField_SortType_DESC_NULLS_LAST);
+			sordf.set_direction(
+			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_LAST);
 
 			break;
 		default:
