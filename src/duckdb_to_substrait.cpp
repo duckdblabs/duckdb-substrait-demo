@@ -170,6 +170,9 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 }
 
 uint64_t DuckDBToSubstrait::RegisterFunction(string name) {
+    if (name.empty()) {
+        throw runtime_error("empty function name bad");
+    }
 	if (functions_map.find(name) == functions_map.end()) {
 		auto function_id = last_function_id++;
 		auto sfun = plan.add_mappings()->mutable_function_mapping();

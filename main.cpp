@@ -35,20 +35,22 @@ static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, s
 	substrait::Plan splan2;
 	splan2.ParseFromString(serialized);
 
-	SubstraitToDuckDB transformer_s2d(con, splan2);
+//    printf("\n%s\n", dplan->ToString().c_str());
+//
+//    splan2.PrintDebugString();
+
+
+    SubstraitToDuckDB transformer_s2d(con, splan2);
 	auto duckdb_rel = transformer_s2d.TransformOp(splan2.relations(0));
 	splan2.Clear();
 
-	//	printf("\n%s\n", dplan->ToString().c_str());
-
-	// splan2.PrintDebugString();
-
-	//	con.Query(q)->Print();
-	//
-	//		duckdb_rel->Print();
-	//	    duckdb_rel->Explain()->Print();
-	//
-	//    duckdb_rel->Execute()->Print();
+//
+//		con.Query(q)->Print();
+//
+//			duckdb_rel->Print();
+//		    duckdb_rel->Explain()->Print();
+//
+//	    duckdb_rel->Execute()->Print();
 
 	return duckdb_rel->Execute();
 }
@@ -73,15 +75,15 @@ int main() {
 	GOOGLE_PROTOBUF_VERIFY_VERSION;
 	duckdb::DuckDB db;
 
-	duckdb::TPCHExtension tpch;
-	tpch.Load(db);
-
 	duckdb::Connection con(db);
 	con.BeginTransaction(); // somehow we need this
 	                        // create TPC-H tables and data
 	con.Query("call dbgen(sf=0.1)");
 
-	roundtrip_tpch_plan(con, 1);
+  //  roundtrip_tpch_plan(con, 11); // ?
+
+
+    roundtrip_tpch_plan(con, 1);
 	// roundtrip_tpch_plan(con, 2);// delim
 	// join
 	roundtrip_tpch_plan(con, 3);
@@ -89,16 +91,15 @@ int main() {
 	roundtrip_tpch_plan(con, 5);
 	roundtrip_tpch_plan(con, 6);
 	roundtrip_tpch_plan(con, 7);
-	roundtrip_tpch_plan(con, 8); // CASE
+	roundtrip_tpch_plan(con, 8);
 	roundtrip_tpch_plan(con, 9);
 	roundtrip_tpch_plan(con, 10);
-	// roundtrip_tpch_plan(con, 11); // ?
-	roundtrip_tpch_plan(con, 12); // CASE
+	roundtrip_tpch_plan(con, 12);
 	roundtrip_tpch_plan(con, 13);
-	roundtrip_tpch_plan(con, 14); // CASE
+	roundtrip_tpch_plan(con, 14);
 	// roundtrip_tpch_plan(con, 15); // ??
 
-	//    roundtrip_tpch_plan(con, 19); // ??
+	// roundtrip_tpch_plan(con, 19); // ??
 
 	//	// transform_plan(con, duckdb::TPCHExtension::GetQuery(16)); // mark
 	// join
