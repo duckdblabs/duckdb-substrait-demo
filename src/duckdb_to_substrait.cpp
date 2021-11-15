@@ -156,11 +156,12 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		auto &dcase = (duckdb::BoundCaseExpression &)dexpr;
 		auto scase = sexpr.mutable_if_then();
 
-		auto sif = scase->mutable_ifs()->Add();
-		TransformExpr(*dcase.check, *sif->mutable_if_());
-		TransformExpr(*dcase.result_if_true, *sif->mutable_then());
-		TransformExpr(*dcase.result_if_false, *scase->mutable_else_());
-
+		for (auto &dcheck : dcase.case_checks) {
+			auto sif = scase->mutable_ifs()->Add();
+			TransformExpr(*dcheck.when_expr, *sif->mutable_if_());
+			TransformExpr(*dcheck.then_expr, *sif->mutable_then());
+		}
+		TransformExpr(*dcase.else_expr, *scase->mutable_else_());
 		return;
 	}
 
@@ -170,15 +171,14 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 }
 
 uint64_t DuckDBToSubstrait::RegisterFunction(string name) {
-    if (name.empty()) {
-        throw runtime_error("empty function name bad");
-    }
+	if (name.empty()) {
+		throw runtime_error("empty function name bad");
+	}
 	if (functions_map.find(name) == functions_map.end()) {
 		auto function_id = last_function_id++;
 		auto sfun = plan.add_mappings()->mutable_function_mapping();
 		sfun->mutable_extension_id()->set_id(42);
 		sfun->mutable_function_id()->set_id(function_id);
-		sfun->set_index(function_id);
 		sfun->set_name(name);
 
 		functions_map[name] = function_id;
@@ -254,7 +254,7 @@ void DuckDBToSubstrait::TransformJoinCond(duckdb::JoinCondition &dcond, substrai
 		join_comparision = "equal";
 		break;
 	case duckdb::ExpressionType::COMPARE_GREATERTHAN:
-		join_comparision = "greatherthan";
+		join_comparision = "greaterthan";
 		break;
 	default:
 		throw runtime_error("Unsupported join comparision");
