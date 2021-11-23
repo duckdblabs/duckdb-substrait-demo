@@ -496,3 +496,8 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		throw runtime_error(duckdb::LogicalOperatorToString(dop.type));
 	}
 }
+
+void DuckDBToSubstrait::TransformPlan(duckdb::LogicalOperator &dop, io::substrait::Plan &splan) {
+	auto sroot = splan.add_relations()->mutable_rel();
+	TransformOp(dop, *sroot);
+}

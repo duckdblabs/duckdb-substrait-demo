@@ -24,12 +24,14 @@ class DuckDBToSubstrait {
 public:
 	DuckDBToSubstrait(io::substrait::Plan &plan_p) : plan(plan_p) {
 	}
-	void TransformOp(duckdb::LogicalOperator &dop, io::substrait::Rel &sop);
+
+	void TransformPlan(duckdb::LogicalOperator &dop, io::substrait::Plan &splan);
 
 private:
 	uint64_t RegisterFunction(std::string name);
 	static void CreateFieldRef(io::substrait::Expression *expr, int32_t col_idx);
 
+	void TransformOp(duckdb::LogicalOperator &dop, io::substrait::Rel &sop);
 	void TransformConstant(duckdb::Value &dval, io::substrait::Expression_Literal &sval);
 	void TransformExpr(duckdb::Expression &dexpr, io::substrait::Expression &sexpr, uint64_t col_offset = 0);
 	void TransformFilter(uint64_t col_idx, duckdb::TableFilter &dfilter, io::substrait::Expression &sfilter);

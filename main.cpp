@@ -23,7 +23,7 @@ static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, s
 	substrait::Plan splan;
 	DuckDBToSubstrait transformer_d2s(splan);
 
-	transformer_d2s.TransformOp(*dplan, *splan.add_relations());
+	transformer_d2s.TransformPlan(*dplan, splan);
 
 	string serialized;
 	if (!splan.SerializeToString(&serialized)) {
@@ -40,7 +40,7 @@ static unique_ptr<duckdb::QueryResult> roundtrip_plan(duckdb::Connection &con, s
 	//    splan2.PrintDebugString();
 
 	SubstraitToDuckDB transformer_s2d(con, splan2);
-	auto duckdb_rel = transformer_s2d.TransformOp(splan2.relations(0));
+	auto duckdb_rel = transformer_s2d.TransformPlan(splan2);
 	splan2.Clear();
 
 	//		con.Query(q)->Print();

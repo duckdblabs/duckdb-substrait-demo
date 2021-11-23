@@ -268,3 +268,7 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 		throw runtime_error("Unsupported relation type " + to_string(sop.RelType_case()));
 	}
 }
+
+std::shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformPlan(const io::substrait::Plan &splan) {
+	return TransformOp(plan.relations(0).rel());
+}

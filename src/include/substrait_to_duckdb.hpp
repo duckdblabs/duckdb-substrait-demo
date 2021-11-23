@@ -23,13 +23,14 @@ class Relation;
 class SubstraitToDuckDB {
 public:
 	SubstraitToDuckDB(duckdb::Connection &con_p, io::substrait::Plan &plan_p);
-	std::shared_ptr<duckdb::Relation> TransformOp(const io::substrait::Rel &sop);
+	std::shared_ptr<duckdb::Relation> TransformPlan(const io::substrait::Plan &splan);
 
 private:
 	std::string FindFunction(uint64_t id);
 
 	std::unique_ptr<duckdb::ParsedExpression> TransformExpr(const io::substrait::Expression &sexpr);
 	duckdb::OrderByNode TransformOrder(const io::substrait::Expression_SortField &sordf);
+	std::shared_ptr<duckdb::Relation> TransformOp(const io::substrait::Rel &sop);
 
 	duckdb::Connection &con;
 	io::substrait::Plan &plan;
