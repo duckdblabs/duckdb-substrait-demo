@@ -18,12 +18,11 @@ using namespace std;
 namespace substrait = io::substrait;
 
 SubstraitToDuckDB::SubstraitToDuckDB(duckdb::Connection &con_p, substrait::Plan &plan_p) : con(con_p), plan(plan_p) {
-	for (auto &smap : plan.mappings()) {
-		if (!smap.has_function_mapping()) {
+	for (auto &sext : plan.extensions()) {
+		if (!sext.has_extension_function()) {
 			continue;
 		}
-		auto &sfmap = smap.function_mapping();
-		functions_map[sfmap.function_id().id()] = sfmap.name();
+		functions_map[sext.extension_function().function_anchor()] = sext.extension_function().name();
 	}
 }
 
@@ -63,7 +62,7 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		for (auto &sarg : sexpr.scalar_function().args()) {
 			children.push_back(TransformExpr(sarg));
 		}
-		auto function_name = FindFunction(sexpr.scalar_function().id().id());
+		auto function_name = FindFunction(sexpr.scalar_function().function_reference());
 		// string compare galore
 		// TODO simplify this
 		if (function_name == "and") {
@@ -136,25 +135,25 @@ string SubstraitToDuckDB::FindFunction(uint64_t id) {
 	return functions_map[id];
 }
 
-duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::Expression_SortField &sordf) {
+duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::SortField &sordf) {
 
 	duckdb::OrderType dordertype;
 	duckdb::OrderByNullType dnullorder;
 
 	switch (sordf.direction()) {
-	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_FIRST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_LAST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_LAST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
-	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_FIRST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_LAST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_LAST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
@@ -212,9 +211,9 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 			throw runtime_error("Only single grouping sets are supported for now");
 		}
 		if (sop.aggregate().groupings_size() > 0) {
-			for (auto &input_field : sop.aggregate().groupings(0).input_fields()) {
-				groups.push_back(duckdb::make_unique<duckdb::PositionalReferenceExpression>(input_field + 1));
-				expressions.push_back(duckdb::make_unique<duckdb::PositionalReferenceExpression>(input_field + 1));
+			for (auto &sgrpexpr : sop.aggregate().groupings(0).grouping_expressions()) {
+				groups.push_back(TransformExpr(sgrpexpr));
+				expressions.push_back(TransformExpr(sgrpexpr));
 			}
 		}
 
@@ -224,7 +223,7 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 				children.push_back(TransformExpr(sarg));
 			}
 			expressions.push_back(duckdb::make_unique<duckdb::FunctionExpression>(
-			    FindFunction(smeas.measure().id().id()), move(children)));
+			    FindFunction(smeas.measure().function_reference()), move(children)));
 		}
 
 		return duckdb::make_shared<duckdb::AggregateRelation>(TransformOp(sop.aggregate().input()), move(expressions),

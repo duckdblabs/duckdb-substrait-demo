@@ -8,7 +8,7 @@ namespace io {
 namespace substrait {
 class Plan;
 class Expression;
-class Expression_SortField;
+class SortField;
 class Rel;
 } // namespace substrait
 } // namespace io
@@ -29,7 +29,7 @@ private:
 	std::string FindFunction(uint64_t id);
 
 	std::unique_ptr<duckdb::ParsedExpression> TransformExpr(const io::substrait::Expression &sexpr);
-	duckdb::OrderByNode TransformOrder(const io::substrait::Expression_SortField &sordf);
+	duckdb::OrderByNode TransformOrder(const io::substrait::SortField &sordf);
 	std::shared_ptr<duckdb::Relation> TransformOp(const io::substrait::Rel &sop);
 
 	duckdb::Connection &con;

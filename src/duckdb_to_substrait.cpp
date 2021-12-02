@@ -57,7 +57,7 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 	case duckdb::ExpressionType::OPERATOR_CAST: {
 		auto &dcast = (duckdb::BoundCastExpression &)dexpr;
 		auto sfun = sexpr.mutable_scalar_function();
-		sfun->mutable_id()->set_id(RegisterFunction("cast"));
+		sfun->set_function_reference(RegisterFunction("cast"));
 		TransformExpr(*dcast.child, *sfun->add_args(), col_offset);
 		sfun->add_args()->mutable_literal()->set_string(dcast.return_type.ToString());
 		return;
@@ -65,7 +65,7 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 	case duckdb::ExpressionType::BOUND_FUNCTION: {
 		auto &dfun = (duckdb::BoundFunctionExpression &)dexpr;
 		auto sfun = sexpr.mutable_scalar_function();
-		sfun->mutable_id()->set_id(RegisterFunction(dfun.function.name));
+		sfun->set_function_reference(RegisterFunction(dfun.function.name));
 
 		for (auto &darg : dfun.children) {
 			auto sarg = sfun->add_args();
@@ -115,7 +115,7 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		}
 
 		auto scalar_fun = sexpr.mutable_scalar_function();
-		scalar_fun->mutable_id()->set_id(RegisterFunction(fname));
+		scalar_fun->set_function_reference(RegisterFunction(fname));
 		TransformExpr(*dcomp.left, *scalar_fun->add_args(), col_offset);
 		TransformExpr(*dcomp.right, *scalar_fun->add_args(), col_offset);
 
@@ -137,7 +137,7 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		}
 
 		auto scalar_fun = sexpr.mutable_scalar_function();
-		scalar_fun->mutable_id()->set_id(RegisterFunction(fname));
+		scalar_fun->set_function_reference(RegisterFunction(fname));
 		TransformExpr(*dconj.children[0], *scalar_fun->add_args(), col_offset);
 		TransformExpr(*dconj.children[1], *scalar_fun->add_args(), col_offset);
 
@@ -147,7 +147,7 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 		auto &dop = (duckdb::BoundOperatorExpression &)dexpr;
 
 		auto scalar_fun = sexpr.mutable_scalar_function();
-		scalar_fun->mutable_id()->set_id(RegisterFunction("is_not_null"));
+		scalar_fun->set_function_reference(RegisterFunction("is_not_null"));
 		TransformExpr(*dop.children[0], *scalar_fun->add_args(), col_offset);
 
 		return;
@@ -176,9 +176,8 @@ uint64_t DuckDBToSubstrait::RegisterFunction(string name) {
 	}
 	if (functions_map.find(name) == functions_map.end()) {
 		auto function_id = last_function_id++;
-		auto sfun = plan.add_mappings()->mutable_function_mapping();
-		sfun->mutable_extension_id()->set_id(42);
-		sfun->mutable_function_id()->set_id(function_id);
+		auto sfun = plan.add_extensions()->mutable_extension_function();
+		sfun->set_function_anchor(function_id);
 		sfun->set_name(name);
 
 		functions_map[name] = function_id;
@@ -195,7 +194,7 @@ void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &d
 	switch (dfilter.filter_type) {
 	case duckdb::TableFilterType::IS_NOT_NULL: {
 		auto scalar_fun = sfilter.mutable_scalar_function();
-		scalar_fun->mutable_id()->set_id(RegisterFunction("is_not_null"));
+		scalar_fun->set_function_reference(RegisterFunction("is_not_null"));
 		CreateFieldRef(scalar_fun->add_args(), col_idx);
 		return;
 	}
@@ -238,7 +237,7 @@ void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &d
 			throw runtime_error(duckdb::ExpressionTypeToString(constant_filter.comparison_type));
 		}
 
-		sfilter.mutable_scalar_function()->mutable_id()->set_id(function_id);
+		sfilter.mutable_scalar_function()->set_function_reference(function_id);
 		return;
 	}
 	default:
@@ -260,22 +259,20 @@ void DuckDBToSubstrait::TransformJoinCond(duckdb::JoinCondition &dcond, substrai
 		throw runtime_error("Unsupported join comparision");
 	}
 	auto scalar_fun = scond.mutable_scalar_function();
-	scalar_fun->mutable_id()->set_id(RegisterFunction(join_comparision));
+	scalar_fun->set_function_reference(RegisterFunction(join_comparision));
 	TransformExpr(*dcond.left, *scalar_fun->add_args());
 	TransformExpr(*dcond.right, *scalar_fun->add_args(), left_ncol);
 }
 
-void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrait::Expression_SortField &sordf) {
+void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrait::SortField &sordf) {
 	switch (dordf.type) {
 	case duckdb::OrderType::ASCENDING:
 		switch (dordf.null_order) {
 		case duckdb::OrderByNullType::NULLS_FIRST:
-			sordf.set_direction(
-			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_FIRST);
+			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_FIRST);
 			break;
 		case duckdb::OrderByNullType::NULLS_LAST:
-			sordf.set_direction(
-			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_ASC_NULLS_LAST);
+			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_LAST);
 
 			break;
 		default:
@@ -285,12 +282,10 @@ void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrai
 	case duckdb::OrderType::DESCENDING:
 		switch (dordf.null_order) {
 		case duckdb::OrderByNullType::NULLS_FIRST:
-			sordf.set_direction(
-			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_FIRST);
+			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_FIRST);
 			break;
 		case duckdb::OrderByNullType::NULLS_LAST:
-			sordf.set_direction(
-			    substrait::Expression_SortField_SortDirection::Expression_SortField_SortDirection_DESC_NULLS_LAST);
+			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_LAST);
 
 			break;
 		default:
@@ -447,8 +442,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 				// TODO push projection or push substrait to allow expressions here
 				throw runtime_error("No expressions in groupings yet");
 			}
-			auto &dref = (duckdb::BoundReferenceExpression &)*dgrp;
-			sgrp->add_input_fields((int32_t)dref.index);
+			TransformExpr(*dgrp, *sgrp->add_grouping_expressions());
 		}
 		for (auto &dmeas : daggr.expressions) {
 			auto smeas = saggr->add_measures()->mutable_measure();
@@ -457,7 +451,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 				throw runtime_error("No non-aggregate expressions in measures yet");
 			}
 			auto &daexpr = (duckdb::BoundAggregateExpression &)*dmeas;
-			smeas->mutable_id()->set_id(RegisterFunction(daexpr.function.name));
+			smeas->set_function_reference(RegisterFunction(daexpr.function.name));
 
 			for (auto &darg : daexpr.children) {
 				TransformExpr(*darg, *smeas->add_args());
