@@ -185,12 +185,12 @@ uint64_t DuckDBToSubstrait::RegisterFunction(string name) {
 	return functions_map[name];
 }
 
-void DuckDBToSubstrait::CreateFieldRef(substrait::Expression *expr, int32_t col_idx) {
+void DuckDBToSubstrait::CreateFieldRef(substrait::Expression *expr, uint64_t col_idx) {
 	expr->mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field((int32_t)col_idx);
 }
 
 void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &dfilter,
-                                        substrait::Expression &sfilter) {
+                                        substrait::Expression &sfilter, bool recursive) {
 	switch (dfilter.filter_type) {
 	case duckdb::TableFilterType::IS_NOT_NULL: {
 		auto scalar_fun = sfilter.mutable_scalar_function();
@@ -203,9 +203,9 @@ void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &d
 		auto &conjunction_filter = (duckdb::ConjunctionAndFilter &)dfilter;
 
 		auto sfilter_conj = CreateConjunction(conjunction_filter.child_filters,
-		                                      [&](unique_ptr<duckdb::TableFilter> &in, substrait::Expression *out) {
-			                                      TransformFilter(col_idx, *in, *out);
-		                                      });
+		                                      [&](unique_ptr<duckdb::TableFilter> &in, substrait::Expression *out, bool recursive_p) {
+			                                      TransformFilter(col_idx, *in, *out, recursive);
+		                                      },recursive);
 		sfilter = *sfilter_conj;
 
 		return;
@@ -246,7 +246,7 @@ void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &d
 }
 
 void DuckDBToSubstrait::TransformJoinCond(duckdb::JoinCondition &dcond, substrait::Expression &scond,
-                                          uint64_t left_ncol) {
+                                          uint64_t left_ncol, bool recursive) {
 	string join_comparision;
 	switch (dcond.comparison) {
 	case duckdb::ExpressionType::COMPARE_EQUAL:
@@ -312,7 +312,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 			filter->mutable_filter()->set_allocated_input(res);
 			filter->mutable_filter()->set_allocated_condition(
 			    CreateConjunction(dfilter.expressions, [&](unique_ptr<duckdb::Expression> &in,
-			                                               substrait::Expression *out) { TransformExpr(*in, *out); }));
+			                                               substrait::Expression *out, bool recursive) { TransformExpr(*in, *out, recursive); }, false));
 			res = filter;
 		}
 
@@ -393,9 +393,9 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		auto left_col_count = dop.children[0]->types.size();
 
 		sjoin->set_allocated_expression(
-		    CreateConjunction(djoin.conditions, [&](duckdb::JoinCondition &in, substrait::Expression *out) {
-			    TransformJoinCond(in, *out, left_col_count);
-		    }));
+		    CreateConjunction(djoin.conditions, [&](duckdb::JoinCondition &in, substrait::Expression *out, bool recursive) {
+			    TransformJoinCond(in, *out, left_col_count, recursive);
+		    }, false));
 
 		switch (djoin.join_type) {
 		case duckdb::JoinType::INNER:
@@ -466,13 +466,13 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		auto sget = sop.mutable_read();
 
 		if (!dget.table_filters.filters.empty()) {
-			sget->set_allocated_filter(CreateConjunction(
+			sget->unsafe_arena_set_allocated_filter(CreateConjunction(
 			    dget.table_filters.filters,
-			    [&](pair<const duckdb::idx_t, unique_ptr<duckdb::TableFilter>> &in, substrait::Expression *out) {
+			    [&](pair<const duckdb::idx_t, unique_ptr<duckdb::TableFilter>> &in, substrait::Expression *out, bool recursive) {
 				    auto col_idx = in.first;
 				    auto &filter = *in.second;
-				    TransformFilter(col_idx, filter, *out);
-			    }));
+				    TransformFilter(col_idx, filter, *out, recursive);
+			    }, false));
 		}
 
 		for (auto column_index : dget.column_ids) {
@@ -491,7 +491,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 	}
 }
 
-void DuckDBToSubstrait::TransformPlan(duckdb::LogicalOperator &dop, io::substrait::Plan &splan) {
-	auto sroot = splan.add_relations()->mutable_rel();
+void DuckDBToSubstrait::TransformPlan(duckdb::LogicalOperator &dop) {
+	auto sroot = plan.add_relations()->mutable_rel();
 	TransformOp(dop, *sroot);
 }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(duckdb_substrait)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   add_compile_options(-Wall -Werror -pedantic -fsanitize=address)
@@ -30,7 +30,8 @@ endif()
 
 find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})
-
+# add extra include directories
+include_directories(cmake-build-debug/)
 file(GLOB ProtoFiles "substrait/binary/*.proto")
 protobuf_generate_cpp(ProtoSources ProtoHeaders ${ProtoFiles})
 add_library(substrait STATIC ${ProtoSources} ${ProtoHeaders})
