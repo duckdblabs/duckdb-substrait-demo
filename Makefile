@@ -12,7 +12,7 @@ duckdb:
 main:
 	mkdir -p build
 	cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build .
-	build/duckdb_substrait
+	build/tests/unit_test
 
 format:
 	clang-format --sort-includes=0 -style=file -i main.cpp src/*.cpp src/include/*.hpp

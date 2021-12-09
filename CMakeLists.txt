@@ -13,14 +13,13 @@ include_directories(duckdb/src/include)
 include_directories(duckdb/extension/tpch/include)
 include_directories(duckdb/test/include)
 
-include_directories(build)
-
 link_directories(duckdb/build/release/src)
 link_directories(duckdb/build/release/extension/tpch)
 link_directories(duckdb/build/release/test/helpers)
 
-add_executable(duckdb_substrait main.cpp src/duckdb_to_substrait.cpp
-                                src/substrait_to_duckdb.cpp)
+add_library(duckdb_substrait src/duckdb_to_substrait.cpp
+                             src/substrait_to_duckdb.cpp)
+
 target_link_libraries(duckdb_substrait duckdb)
 target_link_libraries(duckdb_substrait tpch_extension)
 
@@ -39,3 +38,5 @@ add_library(substrait STATIC ${ProtoSources} ${ProtoHeaders})
 target_link_libraries(duckdb_substrait substrait)
 target_link_libraries(duckdb_substrait test_helpers)
 target_link_libraries(duckdb_substrait ${Protobuf_LIBRARIES})
+
+add_subdirectory("tests")

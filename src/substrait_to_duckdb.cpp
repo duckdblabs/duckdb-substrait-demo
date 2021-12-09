@@ -246,6 +246,7 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 			vector<string> aliases;
 			duckdb::idx_t expr_idx = 0;
 			for (auto &sproj : sget.projection().select().struct_items()) {
+				// FIXME how to get actually alias?
 				aliases.push_back("expr_" + to_string(expr_idx++));
 				// TODO make sure nothing else is in there
 				expressions.push_back(duckdb::make_unique<duckdb::PositionalReferenceExpression>(sproj.field() + 1));

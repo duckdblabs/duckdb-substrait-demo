@@ -25,28 +25,25 @@ struct JoinCondition;
 
 class DuckDBToSubstrait {
 public:
-	DuckDBToSubstrait(){
-	};
+	DuckDBToSubstrait() {};
 
-	~DuckDBToSubstrait(){
-//		plan.GetArena()->Reset();
+	~DuckDBToSubstrait() {
+		//		plan.GetArena()->Reset();
 		plan.Clear();
-//		plan_expressions.clear();
+		//		plan_expressions.clear();
 
-//		plan_relations.clear();
-//		return;
-
+		//		plan_relations.clear();
+		//		return;
 	}
 
 	void TransformPlan(duckdb::LogicalOperator &dop);
 
-
-	void SerializeToString(string& serialized){
+	void SerializeToString(string &serialized) {
 		if (!plan.SerializeToString(&serialized)) {
 			throw runtime_error("eek");
 		}
-
 	}
+
 private:
 	uint64_t RegisterFunction(std::string name);
 	static void CreateFieldRef(io::substrait::Expression *expr, uint64_t col_idx);
@@ -54,30 +51,31 @@ private:
 	void TransformOp(duckdb::LogicalOperator &dop, io::substrait::Rel &sop);
 	static void TransformConstant(duckdb::Value &dval, io::substrait::Expression_Literal &sval);
 	void TransformExpr(duckdb::Expression &dexpr, io::substrait::Expression &sexpr, uint64_t col_offset = 0);
-	void TransformFilter(uint64_t col_idx, duckdb::TableFilter &dfilter, io::substrait::Expression &sfilter, bool recursive);
-	void TransformJoinCond(duckdb::JoinCondition &dcond, io::substrait::Expression &scond, uint64_t left_ncol, bool recursive);
+	void TransformFilter(uint64_t col_idx, duckdb::TableFilter &dfilter, io::substrait::Expression &sfilter,
+	                     bool recursive);
+	void TransformJoinCond(duckdb::JoinCondition &dcond, io::substrait::Expression &scond, uint64_t left_ncol,
+	                       bool recursive);
 	void TransformOrder(duckdb::BoundOrderByNode &dordf, io::substrait::SortField &sordf);
 
-
 	template <typename T, typename Func>
-	io::substrait::Expression* CreateConjunction(T &source, Func f, bool recursive) {
+	io::substrait::Expression *CreateConjunction(T &source, Func f, bool recursive) {
 		recursive = true;
 		unique_ptr<io::substrait::Expression> res;
 		for (auto &ele : source) {
 			auto child_expression = make_unique<io::substrait::Expression>();
-			f(ele, child_expression.get(),true);
+			f(ele, child_expression.get(), true);
 			if (!res) {
 				res = move(child_expression);
 			} else {
-//				auto temp_expr = make_unique<io::substrait::Expression>();
-//				auto scalar_fun = temp_expr->mutable_scalar_function();
-//				scalar_fun->set_function_reference(RegisterFunction("and"));
-//				scalar_fun->mutable_args()->AddAllocated(res.release());
-//				scalar_fun->mutable_args()->AddAllocated(child_expression.release());
-//				res = move(temp_expr);
+				auto temp_expr = make_unique<io::substrait::Expression>();
+				auto scalar_fun = temp_expr->mutable_scalar_function();
+				scalar_fun->set_function_reference(RegisterFunction("and"));
+				scalar_fun->mutable_args()->AddAllocated(res.release());
+				scalar_fun->mutable_args()->AddAllocated(child_expression.release());
+				res = move(temp_expr);
 			}
 		}
-		if (!recursive){
+		if (!recursive) {
 			plan_expressions.push_back(move(res));
 			return plan_expressions.back().get();
 		}
@@ -88,7 +86,7 @@ private:
 	vector<unique_ptr<io::substrait::Rel>> plan_relations;
 	io::substrait::Plan plan;
 	std::unordered_map<std::string, uint64_t> functions_map;
-	//holds the substrait expressions
+	// holds the substrait expressions
 
 	uint64_t last_function_id = 0;
 };

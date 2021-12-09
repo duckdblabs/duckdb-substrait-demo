@@ -189,8 +189,8 @@ void DuckDBToSubstrait::CreateFieldRef(substrait::Expression *expr, uint64_t col
 	expr->mutable_selection()->mutable_direct_reference()->mutable_struct_field()->set_field((int32_t)col_idx);
 }
 
-void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &dfilter,
-                                        substrait::Expression &sfilter, bool recursive) {
+void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &dfilter, substrait::Expression &sfilter,
+                                        bool recursive) {
 	switch (dfilter.filter_type) {
 	case duckdb::TableFilterType::IS_NOT_NULL: {
 		auto scalar_fun = sfilter.mutable_scalar_function();
@@ -202,10 +202,12 @@ void DuckDBToSubstrait::TransformFilter(uint64_t col_idx, duckdb::TableFilter &d
 	case duckdb::TableFilterType::CONJUNCTION_AND: {
 		auto &conjunction_filter = (duckdb::ConjunctionAndFilter &)dfilter;
 
-		auto sfilter_conj = CreateConjunction(conjunction_filter.child_filters,
-		                                      [&](unique_ptr<duckdb::TableFilter> &in, substrait::Expression *out, bool recursive_p) {
-			                                      TransformFilter(col_idx, *in, *out, recursive);
-		                                      },recursive);
+		auto sfilter_conj = CreateConjunction(
+		    conjunction_filter.child_filters,
+		    [&](unique_ptr<duckdb::TableFilter> &in, substrait::Expression *out, bool recursive_p) {
+			    TransformFilter(col_idx, *in, *out, recursive);
+		    },
+		    recursive);
 		sfilter = *sfilter_conj;
 
 		return;
@@ -310,9 +312,12 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		if (!dfilter.expressions.empty()) {
 			auto filter = new substrait::Rel();
 			filter->mutable_filter()->set_allocated_input(res);
-			filter->mutable_filter()->set_allocated_condition(
-			    CreateConjunction(dfilter.expressions, [&](unique_ptr<duckdb::Expression> &in,
-			                                               substrait::Expression *out, bool recursive) { TransformExpr(*in, *out, recursive); }, false));
+			filter->mutable_filter()->set_allocated_condition(CreateConjunction(
+			    dfilter.expressions,
+			    [&](unique_ptr<duckdb::Expression> &in, substrait::Expression *out, bool recursive) {
+				    TransformExpr(*in, *out, recursive);
+			    },
+			    false));
 			res = filter;
 		}
 
@@ -392,10 +397,12 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 
 		auto left_col_count = dop.children[0]->types.size();
 
-		sjoin->set_allocated_expression(
-		    CreateConjunction(djoin.conditions, [&](duckdb::JoinCondition &in, substrait::Expression *out, bool recursive) {
+		sjoin->set_allocated_expression(CreateConjunction(
+		    djoin.conditions,
+		    [&](duckdb::JoinCondition &in, substrait::Expression *out, bool recursive) {
 			    TransformJoinCond(in, *out, left_col_count, recursive);
-		    }, false));
+		    },
+		    false));
 
 		switch (djoin.join_type) {
 		case duckdb::JoinType::INNER:
@@ -468,11 +475,13 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 		if (!dget.table_filters.filters.empty()) {
 			sget->unsafe_arena_set_allocated_filter(CreateConjunction(
 			    dget.table_filters.filters,
-			    [&](pair<const duckdb::idx_t, unique_ptr<duckdb::TableFilter>> &in, substrait::Expression *out, bool recursive) {
+			    [&](pair<const duckdb::idx_t, unique_ptr<duckdb::TableFilter>> &in, substrait::Expression *out,
+			        bool recursive) {
 				    auto col_idx = in.first;
 				    auto &filter = *in.second;
 				    TransformFilter(col_idx, filter, *out, recursive);
-			    }, false));
+			    },
+			    false));
 		}
 
 		for (auto column_index : dget.column_ids) {
