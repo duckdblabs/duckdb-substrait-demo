@@ -36,9 +36,9 @@ bool CompareQueryResults(QueryResult &first, QueryResult &second) {
 	//		return false;
 	//	}
 	// compare types
-//	if (first.types != second.types) {
-//		return false;
-//	}
+	//	if (first.types != second.types) {
+	//		return false;
+	//	}
 	// now compare the actual values
 	// fetch chunks
 	while (true) {
@@ -69,7 +69,7 @@ bool CompareQueryResults(QueryResult &first, QueryResult &second) {
 	}
 }
 
-static void roundtrip_query(duckdb::Connection &con, const string& query) {
+static void roundtrip_query(duckdb::Connection &con, const string &query) {
 	DuckDBToSubstrait transformer_d2s;
 	auto actual_result = con.Query(query);
 
@@ -88,8 +88,7 @@ static void roundtrip_query(duckdb::Connection &con, const string& query) {
 	REQUIRE(CompareQueryResults(*actual_result, *round_trip_result));
 }
 
-TEST_CASE("SELECT *", "[Simple]" )
-{
+TEST_CASE("SELECT *", "[Simple]") {
 	auto db = make_unique<DuckDB>();
 	auto conn = make_unique<Connection>(*db);
 	auto con = *conn;
@@ -99,8 +98,7 @@ TEST_CASE("SELECT *", "[Simple]" )
 	roundtrip_query(con, "select * from person");
 }
 
-TEST_CASE("Projection", "[Simple]" )
-{
+TEST_CASE("Projection", "[Simple]") {
 	auto db = make_unique<DuckDB>();
 	auto conn = make_unique<Connection>(*db);
 	auto con = *conn;
@@ -110,8 +108,7 @@ TEST_CASE("Projection", "[Simple]" )
 	roundtrip_query(con, "select name from person");
 }
 
-TEST_CASE("Filter", "[Simple]" )
-{
+TEST_CASE("Filter", "[Simple]") {
 	auto db = make_unique<DuckDB>();
 	auto conn = make_unique<Connection>(*db);
 	auto con = *conn;
@@ -122,8 +119,7 @@ TEST_CASE("Filter", "[Simple]" )
 	roundtrip_query(con, "select * from person where name = 'Pedro'");
 }
 
-TEST_CASE("Aggregation", "[Simple]" )
-{
+TEST_CASE("Aggregation", "[Simple]") {
 	auto db = make_unique<DuckDB>();
 	auto conn = make_unique<Connection>(*db);
 	auto con = *conn;
@@ -135,8 +131,7 @@ TEST_CASE("Aggregation", "[Simple]" )
 	roundtrip_query(con, "select SUM(money) from person");
 }
 
-TEST_CASE("Aggregation and Filter", "[Simple]" )
-{
+TEST_CASE("Aggregation and Filter", "[Simple]") {
 	auto db = make_unique<DuckDB>();
 	auto conn = make_unique<Connection>(*db);
 	auto con = *conn;
@@ -148,9 +143,8 @@ TEST_CASE("Aggregation and Filter", "[Simple]" )
 	roundtrip_query(con, "select SUM(money) from person where name = 'Pedro'");
 }
 
-TEST_CASE("TPC-H", "[tpch]" )
-{
-//	vector<uint8_t> queries {1,3,5,6,7,8,9,10,11,12,13,14};
+TEST_CASE("TPC-H", "[tpch]") {
+	//	vector<uint8_t> queries {1,3,5,6,7,8,9,10,11,12,13,14};
 	vector<uint8_t> queries {6};
 
 	auto db = make_unique<DuckDB>();
@@ -158,31 +152,18 @@ TEST_CASE("TPC-H", "[tpch]" )
 	auto con = *conn;
 	con.Query("call dbgen(sf=0.1)");
 
-	for (auto& query_number: queries){
+	for (auto &query_number : queries) {
 		auto query = TPCHExtension::GetQuery(query_number);
 		roundtrip_query(con, query);
 	}
-
 }
 
-//SELECT
-//    sum(l_extendedprice * l_discount) AS revenue
-//FROM
-//    lineitem
-//WHERE
-//    l_shipdate >= CAST('1994-01-01' AS date)
-//    AND l_shipdate < CAST('1995-01-01' AS date)
-//    AND l_discount BETWEEN 0.05
-//    AND 0.07
-//    AND l_quantity < 24;
+int main(int argc, char *argv[]) {
+	// global setup...
 
+	int result = Catch::Session().run(argc, argv);
 
-int main( int argc, char* argv[] ) {
-  // global setup...
+	// global clean-up...
 
-  int result = Catch::Session().run( argc, argv );
-
-  // global clean-up...
-
-  return result;
+	return result;
 }
