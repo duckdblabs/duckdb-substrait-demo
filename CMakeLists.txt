@@ -13,6 +13,8 @@ include_directories(duckdb/src/include)
 include_directories(duckdb/extension/tpch/include)
 include_directories(duckdb/test/include)
 
+include_directories(build)
+
 link_directories(duckdb/build/release/src)
 link_directories(duckdb/build/release/extension/tpch)
 link_directories(duckdb/build/release/test/helpers)
