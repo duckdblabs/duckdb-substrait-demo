@@ -6,8 +6,8 @@ defaults:
 
 jobs:
   build:
-    name: Linux Integration
-    runs-on: ubuntu-latest
+    name: DuckDB/Substrait Integration
+    runs-on: macos-latest
 
     steps:
     - uses: actions/checkout@v2
@@ -15,7 +15,7 @@ jobs:
         fetch-depth: 0
 
     - name: Install Protobuf
-      run: PROTOC_ZIP=protoc-3.19.2-linux-x86_64.zip && curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v3.19.2/$PROTOC_ZIP && sudo unzip $PROTOC_ZIP -d $HOME/.local && echo "${HOME}/.local/bin" >> $GITHUB_PATH
+      run: brew install protobuf
 
     - name: Update submodules
       run: |
