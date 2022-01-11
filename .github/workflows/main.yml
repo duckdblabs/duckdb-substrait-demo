@@ -14,15 +14,14 @@ jobs:
       with:
         fetch-depth: 0
 
-    - uses: arduino/setup-protoc@v1
-    - uses: bufbuild/buf-setup-action@v0.7.0
-    - uses: bufbuild/buf-lint-action@v1
-
     - name: Update submodules
       run: |
         git submodule init
         git submodule update --remote --merge
 
+    - uses: arduino/setup-protoc@v1
+    - uses: bufbuild/buf-setup-action@v0.7.0
+    - uses: bufbuild/buf-lint-action@v1
     - name: Build
       run: make
 
