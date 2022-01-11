@@ -13,8 +13,8 @@
 
 #include "duckdb/function/table/table_scan.hpp"
 
-#include "plan.pb.h"
-#include "expression.pb.h"
+#include "substrait/plan.pb.h"
+#include "substrait/expression.pb.h"
 
 using namespace std;
 

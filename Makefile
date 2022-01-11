@@ -1,10 +1,13 @@
 .PHONY: duckdb clean main
 
-all: duckdb main
+all: substrait-gen duckdb main
 
 clean:
 	rm -rf build
 	cd duckdb && make clean
+
+substrait-gen:
+	cd substrait && buf generate
 
 duckdb:
 	cd duckdb && BUILD_TPCH=1 DISABLE_SANITIZER=1 make
@@ -12,7 +15,6 @@ duckdb:
 main:
 	mkdir -p build
 	cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build .
-	build/tests/unit_test
 
 format:
 	clang-format --sort-includes=0 -style=file -i src/*.cpp src/include/*.hpp tests/*.cpp

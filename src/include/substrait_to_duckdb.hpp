@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
-#include "plan.pb.h"
+#include "substrait/plan.pb.h"
 
 namespace io {
 namespace substrait {

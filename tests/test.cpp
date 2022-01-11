@@ -5,7 +5,7 @@
 
 #include "compare_result.hpp"
 
-#include "plan.pb.h"
+#include "substrait/plan.pb.h"
 
 #include "duckdb_to_substrait.hpp"
 #include "substrait_to_duckdb.hpp"

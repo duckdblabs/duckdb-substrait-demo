@@ -11,7 +11,7 @@
 #include "duckdb/main/connection.hpp"
 #include "duckdb/parser/parser.hpp"
 
-#include "plan.pb.h"
+#include "substrait/plan.pb.h"
 
 using namespace std;
 
