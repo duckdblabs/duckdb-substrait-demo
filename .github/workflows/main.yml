@@ -15,7 +15,7 @@ jobs:
         fetch-depth: 0
 
     - name: Install Protobuf
-      run: brew install protobuf
+      run: brew update && brew install protobuf
 
     - name: Update submodules
       run: |
