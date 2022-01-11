@@ -15,8 +15,6 @@
 
 using namespace std;
 
-namespace substrait = io::substrait;
-
 SubstraitToDuckDB::SubstraitToDuckDB(duckdb::Connection &con_p, substrait::Plan &plan_p) : con(con_p), plan(plan_p) {
 	for (auto &sext : plan.extensions()) {
 		if (!sext.has_extension_function()) {
@@ -141,19 +139,19 @@ duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::SortField
 	duckdb::OrderByNullType dnullorder;
 
 	switch (sordf.direction()) {
-	case substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_FIRST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_ASC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_LAST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_ASC_NULLS_LAST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
-	case substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_FIRST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_DESC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_LAST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_DESC_NULLS_LAST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
@@ -165,16 +163,16 @@ duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::SortField
 }
 
 shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel &sop) {
-	switch (sop.RelType_case()) {
+	switch (sop.rel_type_case()) {
 	case substrait::Rel::RelTypeCase::kJoin: {
 		auto &sjoin = sop.join();
 
 		duckdb::JoinType djointype;
 		switch (sjoin.type()) {
-		case substrait::JoinRel::JoinType::JoinRel_JoinType_INNER:
+		case substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_INNER:
 			djointype = duckdb::JoinType::INNER;
 			break;
-		case substrait::JoinRel::JoinType::JoinRel_JoinType_LEFT:
+		case substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_LEFT:
 			djointype = duckdb::JoinType::LEFT;
 			break;
 		default:
@@ -265,10 +263,10 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 		return duckdb::make_shared<duckdb::OrderRelation>(TransformOp(sop.sort().input()), move(order_nodes));
 	}
 	default:
-		throw runtime_error("Unsupported relation type " + to_string(sop.RelType_case()));
+		throw runtime_error("Unsupported relation type " + to_string(sop.rel_type_case()));
 	}
 }
 
-std::shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformPlan(const io::substrait::Plan &splan) {
+std::shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformPlan(const substrait::Plan &splan) {
 	return TransformOp(plan.relations(0).rel());
 }

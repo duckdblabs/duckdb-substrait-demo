@@ -18,8 +18,6 @@
 
 using namespace std;
 
-namespace substrait = io::substrait;
-
 void DuckDBToSubstrait::TransformConstant(duckdb::Value &dval, substrait::Expression_Literal &sval) {
 	auto &duckdb_type = dval.type();
 	switch (duckdb_type.id()) {
@@ -271,10 +269,12 @@ void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrai
 	case duckdb::OrderType::ASCENDING:
 		switch (dordf.null_order) {
 		case duckdb::OrderByNullType::NULLS_FIRST:
-			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_FIRST);
+			sordf.set_direction(
+			    substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_ASC_NULLS_FIRST);
 			break;
 		case duckdb::OrderByNullType::NULLS_LAST:
-			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_LAST);
+			sordf.set_direction(
+			    substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_ASC_NULLS_LAST);
 
 			break;
 		default:
@@ -284,10 +284,12 @@ void DuckDBToSubstrait::TransformOrder(duckdb::BoundOrderByNode &dordf, substrai
 	case duckdb::OrderType::DESCENDING:
 		switch (dordf.null_order) {
 		case duckdb::OrderByNullType::NULLS_FIRST:
-			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_FIRST);
+			sordf.set_direction(
+			    substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_DESC_NULLS_FIRST);
 			break;
 		case duckdb::OrderByNullType::NULLS_LAST:
-			sordf.set_direction(substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_LAST);
+			sordf.set_direction(
+			    substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_DESC_NULLS_LAST);
 
 			break;
 		default:
@@ -406,10 +408,10 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 
 		switch (djoin.join_type) {
 		case duckdb::JoinType::INNER:
-			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_INNER);
+			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_INNER);
 			break;
 		case duckdb::JoinType::LEFT:
-			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_LEFT);
+			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_LEFT);
 			break;
 		default:
 			throw runtime_error("Unsupported join type");

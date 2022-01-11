@@ -20,7 +20,6 @@
 
 using namespace std;
 using namespace duckdb;
-namespace substrait = io::substrait;
 
 bool CompareQueryResults(QueryResult &first, QueryResult &second) {
 	// first compare the success state of the results
