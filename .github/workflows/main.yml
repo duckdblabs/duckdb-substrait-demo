@@ -27,9 +27,13 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - uses: bufbuild/buf-setup-action@v0.7.0
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
     - uses: bufbuild/buf-lint-action@v1
       with:
         input: 'substrait'
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build
       run: make
