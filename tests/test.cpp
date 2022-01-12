@@ -21,6 +21,11 @@
 using namespace std;
 using namespace duckdb;
 
+auto tpch_db = make_unique<DuckDB>();
+auto tpch_conn = make_unique<Connection>(*tpch_db);
+auto tpch_con = *tpch_conn;
+bool initialize = true;
+
 bool CompareQueryResults(QueryResult &first, QueryResult &second) {
 	// first compare the success state of the results
 	if (first.success != second.success) {
@@ -142,20 +147,63 @@ TEST_CASE("Aggregation and Filter", "[Simple]") {
 	roundtrip_query(con, "select SUM(money) from person where name = 'Pedro'");
 }
 
-TEST_CASE("TPC-H", "[tpch]") {
-	//	vector<uint8_t> queries {1,3,5,6,7,8,9,10,11,12,13,14};
-	vector<uint8_t> queries {6};
 
-	auto db = make_unique<DuckDB>();
-	auto conn = make_unique<Connection>(*db);
-	auto con = *conn;
-	con.Query("call dbgen(sf=0.1)");
-
-	for (auto &query_number : queries) {
-		auto query = TPCHExtension::GetQuery(query_number);
-		roundtrip_query(con, query);
+void test_tpch(int query_number){
+	if (initialize){
+		initialize = false;
+		tpch_con.Query("call dbgen(sf=0.1)");
 	}
+	auto query = TPCHExtension::GetQuery(query_number);
+	roundtrip_query(tpch_con, query);
 }
+
+//TEST_CASE("TPC-H Q 01", "[tpch]") {
+//	test_tpch(1);
+//}
+
+//TEST_CASE("TPC-H Q 03", "[tpch]") {
+//	test_tpch(3);
+//}
+//
+//TEST_CASE("TPC-H Q 05", "[tpch]") {
+//	test_tpch(5);
+//}
+
+TEST_CASE("TPC-H Q 06", "[tpch]") {
+	test_tpch(6);
+}
+
+//TEST_CASE("TPC-H Q 07", "[tpch]") {
+//	test_tpch(7);
+//}
+//
+//TEST_CASE("TPC-H Q 08", "[tpch]") {
+//	test_tpch(8);
+//}
+//
+//TEST_CASE("TPC-H Q 09", "[tpch]") {
+//	test_tpch(9);
+//}
+//
+//TEST_CASE("TPC-H Q 10", "[tpch]") {
+//	test_tpch(10);
+//}
+
+TEST_CASE("TPC-H Q 11", "[tpch]") {
+	test_tpch(11);
+}
+
+//TEST_CASE("TPC-H Q 12", "[tpch]") {
+//	test_tpch(12);
+//}
+//
+//TEST_CASE("TPC-H Q 13", "[tpch]") {
+//	test_tpch(13);
+//}
+//
+//TEST_CASE("TPC-H Q 14", "[tpch]") {
+//	test_tpch(14);
+//}
 
 int main(int argc, char *argv[]) {
 	// global setup...

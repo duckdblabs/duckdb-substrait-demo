@@ -55,6 +55,7 @@ set(SUBSTRAIT_HEADERS
     ${SUBSTRAIT_PATH}/type.pb.h
     ${SUBSTRAIT_PATH}/type_expressions.pb.h
     ${SUBSTRAIT_PATH}/extensions/extensions.pb.h)
+
 add_library(substrait STATIC ${SUBSTRAIT_SOURCES} ${SUBSTRAIT_HEADERS})
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/substrait/proto/substrait)
