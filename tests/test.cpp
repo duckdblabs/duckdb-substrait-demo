@@ -26,13 +26,13 @@ auto tpch_conn = make_unique<Connection>(*tpch_db);
 auto tpch_con = *tpch_conn;
 bool initialize = true;
 
-bool CompareQueryResults(QueryResult &first, QueryResult &second) {
-	// first compare the success state of the results
-	if (first.success != second.success) {
+bool CompareQueryResults(QueryResult &actual_result, QueryResult &roundtrip_result) {
+	// actual_result compare the success state of the results
+	if (actual_result.success != roundtrip_result.success) {
 		return false;
 	}
-	if (!first.success) {
-		return first.error == second.error;
+	if (!actual_result.success) {
+		return actual_result.error == roundtrip_result.error;
 	}
 	// FIXME: How to name expression?
 	//	// compare names
@@ -40,14 +40,14 @@ bool CompareQueryResults(QueryResult &first, QueryResult &second) {
 	//		return false;
 	//	}
 	// compare types
-	//	if (first.types != second.types) {
-	//		return false;
-	//	}
+	if (actual_result.types != roundtrip_result.types) {
+		return false;
+	}
 	// now compare the actual values
 	// fetch chunks
 	while (true) {
-		auto lchunk = first.Fetch();
-		auto rchunk = second.Fetch();
+		auto lchunk = actual_result.Fetch();
+		auto rchunk = roundtrip_result.Fetch();
 		if (!lchunk && !rchunk) {
 			return true;
 		}
@@ -76,7 +76,8 @@ bool CompareQueryResults(QueryResult &first, QueryResult &second) {
 static void roundtrip_query(duckdb::Connection &con, const string &query) {
 	DuckDBToSubstrait transformer_d2s;
 	auto actual_result = con.Query(query);
-
+	// We should export unoptimized plans ?
+	//	con.context->config.enable_optimizer = false;
 	auto query_plan = con.context->ExtractPlan(query);
 	transformer_d2s.TransformPlan(*query_plan);
 
@@ -88,6 +89,7 @@ static void roundtrip_query(duckdb::Connection &con, const string &query) {
 	SubstraitToDuckDB transformer_s2d(con, splan2);
 	auto duckdb_rel = transformer_s2d.TransformPlan(splan2);
 	splan2.Clear();
+	//	duckdb_rel->Print();
 	auto round_trip_result = duckdb_rel->Execute();
 	REQUIRE(CompareQueryResults(*actual_result, *round_trip_result));
 }
@@ -135,6 +137,16 @@ TEST_CASE("Aggregation", "[Simple]") {
 	roundtrip_query(con, "select SUM(money) from person");
 }
 
+// TEST_CASE("Aggregation on Decimal", "[Simple]") {
+//	auto db = make_unique<DuckDB>();
+//	auto conn = make_unique<Connection>(*db);
+//	auto con = *conn;
+//	con.Query("CREATE TABLE person (money DECIMAL(5,2));");
+//	con.Query("insert into person values (105.35);");
+//	con.Query("insert into person values (1.11);");
+//	roundtrip_query(con, "select SUM(money * 2) from person");
+// }
+
 TEST_CASE("Aggregation and Filter", "[Simple]") {
 	auto db = make_unique<DuckDB>();
 	auto conn = make_unique<Connection>(*db);
@@ -147,63 +159,63 @@ TEST_CASE("Aggregation and Filter", "[Simple]") {
 	roundtrip_query(con, "select SUM(money) from person where name = 'Pedro'");
 }
 
-
-void test_tpch(int query_number){
-	if (initialize){
+void test_tpch(int query_number) {
+	if (initialize) {
 		initialize = false;
 		tpch_con.Query("call dbgen(sf=0.1)");
 	}
 	auto query = TPCHExtension::GetQuery(query_number);
+	//	query = "select sum(l_extendedprice * 2) as sum_disc_price  from lineitem ";
 	roundtrip_query(tpch_con, query);
 }
 
-//TEST_CASE("TPC-H Q 01", "[tpch]") {
+// TEST_CASE("TPC-H Q 01", "[tpch]") {
 //	test_tpch(1);
-//}
+// }
 
-//TEST_CASE("TPC-H Q 03", "[tpch]") {
+// TEST_CASE("TPC-H Q 03", "[tpch]") {
 //	test_tpch(3);
-//}
+// }
 //
-//TEST_CASE("TPC-H Q 05", "[tpch]") {
+// TEST_CASE("TPC-H Q 05", "[tpch]") {
 //	test_tpch(5);
-//}
+// }
 
 TEST_CASE("TPC-H Q 06", "[tpch]") {
 	test_tpch(6);
 }
 
-//TEST_CASE("TPC-H Q 07", "[tpch]") {
+// TEST_CASE("TPC-H Q 07", "[tpch]") {
 //	test_tpch(7);
-//}
+// }
 //
-//TEST_CASE("TPC-H Q 08", "[tpch]") {
+// TEST_CASE("TPC-H Q 08", "[tpch]") {
 //	test_tpch(8);
-//}
+// }
 //
-//TEST_CASE("TPC-H Q 09", "[tpch]") {
+// TEST_CASE("TPC-H Q 09", "[tpch]") {
 //	test_tpch(9);
-//}
+// }
 //
-//TEST_CASE("TPC-H Q 10", "[tpch]") {
+// TEST_CASE("TPC-H Q 10", "[tpch]") {
 //	test_tpch(10);
-//}
+// }
 
 TEST_CASE("TPC-H Q 11", "[tpch]") {
 	test_tpch(11);
 }
 
-//TEST_CASE("TPC-H Q 12", "[tpch]") {
+// TEST_CASE("TPC-H Q 12", "[tpch]") {
 //	test_tpch(12);
-//}
+// }
 //
-//TEST_CASE("TPC-H Q 13", "[tpch]") {
+// TEST_CASE("TPC-H Q 13", "[tpch]") {
 //	test_tpch(13);
-//}
+// }
 //
-//TEST_CASE("TPC-H Q 14", "[tpch]") {
+// TEST_CASE("TPC-H Q 14", "[tpch]") {
 //	test_tpch(14);
-//}
+// }
 
 int main(int argc, char *argv[]) {
 	// global setup...

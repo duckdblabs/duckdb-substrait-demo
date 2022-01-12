@@ -4,30 +4,31 @@ project(duckdb_substrait)
 set(CMAKE_CXX_STANDARD 17)
 
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-  add_compile_options(-Wall -Werror -pedantic -fsanitize=address)
+  add_compile_options(
+    -Wall
+    -Werror
+    -pedantic
+    -fsanitize=address
+    -fno-sanitize=vptr
+    -fno-sanitize=undefined
+    -fno-sanitize-recover=all)
 endif()
 
-include_directories(src/include)
+set(BUILD_TPCH_EXTENSION TRUE)
 
-include_directories(duckdb/src/include)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-sanitize=vptr")
+
+include_directories(src/include)
 include_directories(duckdb/extension/tpch/include)
 include_directories(duckdb/test/include)
 
-include_directories(build)
-
-link_directories(duckdb/build/release/src)
-link_directories(duckdb/build/release/extension/tpch)
-link_directories(duckdb/build/release/test/helpers)
+add_subdirectory(duckdb)
 
 add_library(duckdb_substrait src/duckdb_to_substrait.cpp
                              src/substrait_to_duckdb.cpp)
 
-target_link_libraries(duckdb_substrait duckdb)
 target_link_libraries(duckdb_substrait tpch_extension)
-
-if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-  target_link_libraries(duckdb_substrait -fsanitize=address)
-endif()
+target_link_libraries(duckdb_substrait duckdb)
 
 find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})

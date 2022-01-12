@@ -8,11 +8,16 @@ jobs:
   build:
     name: DuckDB/Substrait Integration
     runs-on: macos-latest
+    env:
+      GEN: ninja
 
     steps:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
+
+    - name: Install Ninja
+      run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
 
     - name: Install Protobuf
       run: brew update && brew install protobuf
