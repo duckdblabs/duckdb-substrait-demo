@@ -16,11 +16,8 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install Ninja
-      run: sudo apt-get update -y -qq && sudo apt-get install -y -qq ninja-build
-
-    - name: Install Protobuf
-      run: brew update && brew install protobuf
+    - name: Install Protobuf and Ninja
+      run: brew update && brew install protobuf && brew install ninja
 
     - name: Update submodules
       run: |
