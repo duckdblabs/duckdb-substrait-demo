@@ -79,6 +79,7 @@ static void roundtrip_query(duckdb::Connection &con, const string &query) {
 	// We should export unoptimized plans ?
 	//	con.context->config.enable_optimizer = false;
 	auto query_plan = con.context->ExtractPlan(query);
+	//	query_plan->Print();
 	transformer_d2s.TransformPlan(*query_plan);
 
 	string serialized;
@@ -137,15 +138,15 @@ TEST_CASE("Aggregation", "[Simple]") {
 	roundtrip_query(con, "select SUM(money) from person");
 }
 
-// TEST_CASE("Aggregation on Decimal", "[Simple]") {
-//	auto db = make_unique<DuckDB>();
-//	auto conn = make_unique<Connection>(*db);
-//	auto con = *conn;
-//	con.Query("CREATE TABLE person (money DECIMAL(5,2));");
-//	con.Query("insert into person values (105.35);");
-//	con.Query("insert into person values (1.11);");
-//	roundtrip_query(con, "select SUM(money * 2) from person");
-// }
+TEST_CASE("Aggregation on Decimal", "[Simple]") {
+	auto db = make_unique<DuckDB>();
+	auto conn = make_unique<Connection>(*db);
+	auto con = *conn;
+	con.Query("CREATE TABLE person (money DECIMAL(5,2));");
+	con.Query("insert into person values (105.35);");
+	con.Query("insert into person values (1.11);");
+	roundtrip_query(con, "select SUM(money * 2) as double_money from person");
+}
 
 TEST_CASE("Aggregation and Filter", "[Simple]") {
 	auto db = make_unique<DuckDB>();
@@ -165,21 +166,21 @@ void test_tpch(int query_number) {
 		tpch_con.Query("call dbgen(sf=0.1)");
 	}
 	auto query = TPCHExtension::GetQuery(query_number);
-	//	query = "select sum(l_extendedprice * 2) as sum_disc_price  from lineitem ";
+	//		query = "select sum(l_extendedprice * (1 - l_discount)) as sum_disc_price  from lineitem ";
 	roundtrip_query(tpch_con, query);
 }
 
-// TEST_CASE("TPC-H Q 01", "[tpch]") {
-//	test_tpch(1);
-// }
+TEST_CASE("TPC-H Q 01", "[tpch]") {
+	test_tpch(1);
+}
 
-// TEST_CASE("TPC-H Q 03", "[tpch]") {
-//	test_tpch(3);
-// }
-//
-// TEST_CASE("TPC-H Q 05", "[tpch]") {
-//	test_tpch(5);
-// }
+TEST_CASE("TPC-H Q 03", "[tpch]") {
+	test_tpch(3);
+}
+
+TEST_CASE("TPC-H Q 05", "[tpch]") {
+	test_tpch(5);
+}
 
 TEST_CASE("TPC-H Q 06", "[tpch]") {
 	test_tpch(6);
@@ -192,30 +193,30 @@ TEST_CASE("TPC-H Q 06", "[tpch]") {
 // TEST_CASE("TPC-H Q 08", "[tpch]") {
 //	test_tpch(8);
 // }
-//
+
 // TEST_CASE("TPC-H Q 09", "[tpch]") {
 //	test_tpch(9);
 // }
-//
-// TEST_CASE("TPC-H Q 10", "[tpch]") {
-//	test_tpch(10);
-// }
+
+TEST_CASE("TPC-H Q 10", "[tpch]") {
+	test_tpch(10);
+}
 
 TEST_CASE("TPC-H Q 11", "[tpch]") {
 	test_tpch(11);
 }
-
+//
 // TEST_CASE("TPC-H Q 12", "[tpch]") {
 //	test_tpch(12);
 // }
-//
+
 // TEST_CASE("TPC-H Q 13", "[tpch]") {
 //	test_tpch(13);
 // }
-//
-// TEST_CASE("TPC-H Q 14", "[tpch]") {
-//	test_tpch(14);
-// }
+
+TEST_CASE("TPC-H Q 14", "[tpch]") {
+	test_tpch(14);
+}
 
 int main(int argc, char *argv[]) {
 	// global setup...

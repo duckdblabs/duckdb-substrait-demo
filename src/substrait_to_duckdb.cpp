@@ -27,7 +27,7 @@ SubstraitToDuckDB::SubstraitToDuckDB(duckdb::Connection &con_p, substrait::Plan 
 unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const substrait::Expression &sexpr) {
 	switch (sexpr.rex_type_case()) {
 	case substrait::Expression::RexTypeCase::kLiteral: {
-		auto slit = sexpr.literal();
+		const auto &slit = sexpr.literal();
 		duckdb::Value dval;
 		switch (slit.literal_type_case()) {
 		case substrait::Expression_Literal::LiteralTypeCase::kFp64:
@@ -37,6 +37,13 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		case substrait::Expression_Literal::LiteralTypeCase::kString:
 			dval = duckdb::Value(slit.string());
 			break;
+		case substrait::Expression_Literal::LiteralTypeCase::kDecimal: {
+			const auto &substrait_decimal = slit.decimal();
+			// TODO: Support hugeint?
+			int64_t substrait_value = std::stoll(substrait_decimal.value());
+			dval = duckdb::Value::DECIMAL(substrait_value, substrait_decimal.precision(), substrait_decimal.scale());
+			break;
+		}
 
 		case substrait::Expression_Literal::LiteralTypeCase::kI32:
 			dval = duckdb::Value::INTEGER(slit.i32());
@@ -109,10 +116,10 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		return duckdb::make_unique<duckdb::FunctionExpression>(function_name, move(children));
 	}
 	case substrait::Expression::RexTypeCase::kIfThen: {
-		auto scase = sexpr.if_then();
+		const auto &scase = sexpr.if_then();
 
 		auto dcase = duckdb::make_unique<duckdb::CaseExpression>();
-		for (auto sif : scase.ifs()) {
+		for (const auto &sif : scase.ifs()) {
 			duckdb::CaseCheck dif;
 			dif.when_expr = TransformExpr(sif.if_());
 			dif.then_expr = TransformExpr(sif.then());

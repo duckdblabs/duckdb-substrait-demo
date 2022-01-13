@@ -18,12 +18,35 @@
 
 using namespace std;
 
+string GetDecimalInternalString(duckdb::Value &value) {
+	switch (value.type().InternalType()) {
+	case duckdb::PhysicalType::INT8:
+		return to_string(value.GetValueUnsafe<int8_t>());
+	case duckdb::PhysicalType::INT16:
+		return to_string(value.GetValueUnsafe<int16_t>());
+	case duckdb::PhysicalType::INT32:
+		return to_string(value.GetValueUnsafe<int32_t>());
+	case duckdb::PhysicalType::INT64:
+		return to_string(value.GetValueUnsafe<int64_t>());
+	case duckdb::PhysicalType::INT128:
+		return value.GetValueUnsafe<duckdb::hugeint_t>().ToString();
+	default:
+		throw runtime_error("Not accepted internal type for decimal");
+	}
+}
 void DuckDBToSubstrait::TransformConstant(duckdb::Value &dval, substrait::Expression_Literal &sval) {
 	auto &duckdb_type = dval.type();
 	switch (duckdb_type.id()) {
 	case duckdb::LogicalTypeId::DECIMAL: {
-		// TODO use actual decimals
-		sval.set_fp64(dval.GetValue<double>());
+		auto *allocated_decimal = new ::substrait::Expression_Literal_Decimal();
+		uint8_t scale, width;
+		dval.type().GetDecimalProperties(width, scale);
+		allocated_decimal->set_scale(scale);
+		allocated_decimal->set_precision(width);
+		auto *decimal_value = new string();
+		*decimal_value = GetDecimalInternalString(dval);
+		allocated_decimal->set_allocated_value(decimal_value);
+		sval.set_allocated_decimal(allocated_decimal);
 		break;
 	}
 	case duckdb::LogicalTypeId::INTEGER: {
