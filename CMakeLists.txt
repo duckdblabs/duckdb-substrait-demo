@@ -27,7 +27,6 @@ add_subdirectory(duckdb)
 add_library(duckdb_substrait src/duckdb_to_substrait.cpp
                              src/substrait_to_duckdb.cpp)
 
-target_link_libraries(duckdb_substrait tpch_extension)
 target_link_libraries(duckdb_substrait duckdb)
 
 find_package(Protobuf REQUIRED)

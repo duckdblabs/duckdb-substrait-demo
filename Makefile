@@ -1,6 +1,6 @@
 .PHONY: duckdb clean main
 
-all: substrait-gen duckdb main
+all: substrait-gen main
 
 clean:
 	rm -rf build
