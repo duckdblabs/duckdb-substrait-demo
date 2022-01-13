@@ -37,7 +37,8 @@ jobs:
         input: 'substrait'
 
     - name: Build
-      run: make
+      run: cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Debug --build
+
 
     - name: Test
       run: build/tests/unit_test

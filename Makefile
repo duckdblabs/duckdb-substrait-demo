@@ -1,10 +1,9 @@
-.PHONY: duckdb clean main
+.PHONY: clean main
 
 all: substrait-gen main
 
 clean:
 	rm -rf build
-	cd duckdb && make clean
 
 substrait-gen:
 	cd substrait && buf generate

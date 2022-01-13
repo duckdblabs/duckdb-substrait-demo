@@ -48,7 +48,9 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		case substrait::Expression_Literal::LiteralTypeCase::kI32:
 			dval = duckdb::Value::INTEGER(slit.i32());
 			break;
-
+		case substrait::Expression_Literal::LiteralTypeCase::kI64:
+			dval = duckdb::Value::BIGINT(slit.i64());
+			break;
 		default:
 			throw runtime_error(to_string(slit.literal_type_case()));
 		}

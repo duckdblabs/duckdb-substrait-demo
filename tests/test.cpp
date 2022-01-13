@@ -186,13 +186,13 @@ TEST_CASE("TPC-H Q 06", "[tpch]") {
 	test_tpch(6);
 }
 
-// TEST_CASE("TPC-H Q 07", "[tpch]") {
-//	test_tpch(7);
-// }
-//
-// TEST_CASE("TPC-H Q 08", "[tpch]") {
-//	test_tpch(8);
-// }
+TEST_CASE("TPC-H Q 07", "[tpch]") {
+	test_tpch(7);
+}
+
+TEST_CASE("TPC-H Q 08", "[tpch]") {
+	test_tpch(8);
+}
 
 // TEST_CASE("TPC-H Q 09", "[tpch]") {
 //	test_tpch(9);
@@ -205,10 +205,10 @@ TEST_CASE("TPC-H Q 10", "[tpch]") {
 TEST_CASE("TPC-H Q 11", "[tpch]") {
 	test_tpch(11);
 }
-//
-// TEST_CASE("TPC-H Q 12", "[tpch]") {
-//	test_tpch(12);
-// }
+
+TEST_CASE("TPC-H Q 12", "[tpch]") {
+	test_tpch(12);
+}
 
 // TEST_CASE("TPC-H Q 13", "[tpch]") {
 //	test_tpch(13);

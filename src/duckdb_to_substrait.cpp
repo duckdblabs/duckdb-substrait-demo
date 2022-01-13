@@ -53,6 +53,10 @@ void DuckDBToSubstrait::TransformConstant(duckdb::Value &dval, substrait::Expres
 		sval.set_i32(dval.GetValue<int32_t>());
 		break;
 	}
+	case duckdb::LogicalTypeId::BIGINT: {
+		sval.set_i64(dval.GetValue<int64_t>());
+		break;
+	}
 	case duckdb::LogicalTypeId::DATE: {
 		// TODO how are we going to represent dates?
 		sval.set_string(dval.ToString());
@@ -137,8 +141,8 @@ void DuckDBToSubstrait::TransformExpr(duckdb::Expression &dexpr, substrait::Expr
 
 		auto scalar_fun = sexpr.mutable_scalar_function();
 		scalar_fun->set_function_reference(RegisterFunction(fname));
-		TransformExpr(*dcomp.left, *scalar_fun->add_args(), col_offset);
-		TransformExpr(*dcomp.right, *scalar_fun->add_args(), col_offset);
+		TransformExpr(*dcomp.left, *scalar_fun->add_args(), 0);
+		TransformExpr(*dcomp.right, *scalar_fun->add_args(), 0);
 
 		return;
 	}
