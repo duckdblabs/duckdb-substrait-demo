@@ -10,7 +10,7 @@ substrait-gen:
 
 main:
 	mkdir -p build
-	cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build .
+	cd build && cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Debug .. && cmake --build .
 
 format:
 	clang-format --sort-includes=0 -style=file -i src/*.cpp src/include/*.hpp tests/*.cpp

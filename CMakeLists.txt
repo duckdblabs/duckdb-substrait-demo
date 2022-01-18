@@ -14,7 +14,12 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     -fno-sanitize-recover=all)
 endif()
 
-set(BUILD_TPCH_EXTENSION TRUE)
+set(BUILD_SHELL
+    OFF
+    CACHE BOOL "Build the DuckDB Shell and SQLite API Wrappers")
+set(BUILD_TPCH_EXTENSION
+    ON
+    CACHE BOOL "Build the TPC-H extension.")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-sanitize=vptr")
 

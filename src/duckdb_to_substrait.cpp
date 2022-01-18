@@ -344,7 +344,7 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 			filter->mutable_filter()->set_allocated_condition(CreateConjunction(
 			    dfilter.expressions,
 			    [&](unique_ptr<duckdb::Expression> &in, substrait::Expression *out, bool recursive) {
-				    TransformExpr(*in, *out, recursive);
+				    TransformExpr(*in, *out);
 			    },
 			    false));
 			res = filter;
@@ -439,6 +439,9 @@ void DuckDBToSubstrait::TransformOp(duckdb::LogicalOperator &dop, substrait::Rel
 			break;
 		case duckdb::JoinType::LEFT:
 			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_LEFT);
+			break;
+		case duckdb::JoinType::RIGHT:
+			sjoin->set_type(substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_RIGHT);
 			break;
 		default:
 			throw runtime_error("Unsupported join type");
