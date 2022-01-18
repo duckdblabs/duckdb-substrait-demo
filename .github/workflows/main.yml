@@ -8,8 +8,6 @@ jobs:
   build:
     name: DuckDB/Substrait Integration
     runs-on: macos-latest
-    env:
-      GEN: ninja
 
     steps:
     - uses: actions/checkout@v2
@@ -37,7 +35,7 @@ jobs:
         input: 'substrait'
 
     - name: Build Substrait
-      run: buf generate
+      run: make substrait-gen
 
     - name: Build
       run: make main
