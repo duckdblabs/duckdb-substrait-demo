@@ -40,6 +40,7 @@ include_directories(${Protobuf_INCLUDE_DIRS})
 include_directories(substrait/gen/proto/cpp)
 
 set(SUBSTRAIT_PATH substrait/gen/proto/cpp/substrait)
+
 set(SUBSTRAIT_SOURCES
     ${SUBSTRAIT_PATH}/capabilities.pb.cc
     ${SUBSTRAIT_PATH}/expression.pb.cc
@@ -50,6 +51,7 @@ set(SUBSTRAIT_SOURCES
     ${SUBSTRAIT_PATH}/type.pb.cc
     ${SUBSTRAIT_PATH}/type_expressions.pb.cc
     ${SUBSTRAIT_PATH}/extensions/extensions.pb.cc)
+
 set(SUBSTRAIT_HEADERS
     ${SUBSTRAIT_PATH}/capabilities.pb.h
     ${SUBSTRAIT_PATH}/expression.pb.h
