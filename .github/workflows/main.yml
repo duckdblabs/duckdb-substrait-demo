@@ -17,7 +17,7 @@ jobs:
         fetch-depth: 0
 
     - name: Install Protobuf and Ninja
-      run: brew update && brew install protobuf && brew install ninja && brew install buf
+      run: brew update && brew install protobuf && brew install ninja && brew tap bufbuild/buf && brew install buf
 
     - name: Update submodules
       run: make initialize-sub
