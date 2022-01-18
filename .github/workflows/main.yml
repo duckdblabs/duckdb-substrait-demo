@@ -6,21 +6,39 @@ defaults:
 
 jobs:
   build:
-    name: Linux Integration
-    runs-on: ubuntu-latest
+    name: DuckDB/Substrait Integration
+    runs-on: macos-latest
 
     steps:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
 
-    - name: Install
-      run: sudo apt-get update -y -qq && sudo apt-get install -y -qq protobuf-compiler 
+    - name: Install Protobuf and Ninja
+      run: brew update && brew install protobuf && brew install ninja
 
     - name: Update submodules
       run: |
         git submodule init
         git submodule update --remote --merge
 
-    - name: Build and test
-      run: make
+    - uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: bufbuild/buf-setup-action@v0.7.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: bufbuild/buf-lint-action@v1
+      with:
+        input: 'substrait'
+
+    - name: Build Substrait
+      run: make substrait-gen
+
+    - name: Build
+      run: make main
+
+    - name: Test
+      run: build/tests/unit_test

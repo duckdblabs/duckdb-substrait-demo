@@ -1,19 +1,23 @@
-.PHONY: duckdb clean main
+.PHONY: clean main
 
-all: duckdb main
+all: initialize-sub substrait-gen main
 
 clean:
 	rm -rf build
-	cd duckdb && make clean
+	rm -rf duckdb
+	rm -rf substrait
 
-duckdb:
-	cd duckdb && BUILD_TPCH=1 DISABLE_SANITIZER=1 make
+initialize-sub:
+	git submodule init
+	git submodule update --remote --merge
+
+substrait-gen:
+	cd substrait && buf generate
 
 main:
 	mkdir -p build
-	cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build .
-	build/duckdb_substrait
+	cd build && cmake -G "Ninja" -DCMAKE_BUILD_TYPE=Debug .. && cmake --build .
 
 format:
-	clang-format --sort-includes=0 -style=file -i main.cpp src/*.cpp src/include/*.hpp
+	clang-format --sort-includes=0 -style=file -i src/*.cpp src/include/*.hpp tests/*.cpp
 	cmake-format -i CMakeLists.txt

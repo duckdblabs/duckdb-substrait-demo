@@ -11,11 +11,9 @@
 #include "duckdb/main/connection.hpp"
 #include "duckdb/parser/parser.hpp"
 
-#include "plan.pb.h"
+#include "substrait/plan.pb.h"
 
 using namespace std;
-
-namespace substrait = io::substrait;
 
 SubstraitToDuckDB::SubstraitToDuckDB(duckdb::Connection &con_p, substrait::Plan &plan_p) : con(con_p), plan(plan_p) {
 	for (auto &sext : plan.extensions()) {
@@ -29,7 +27,7 @@ SubstraitToDuckDB::SubstraitToDuckDB(duckdb::Connection &con_p, substrait::Plan 
 unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const substrait::Expression &sexpr) {
 	switch (sexpr.rex_type_case()) {
 	case substrait::Expression::RexTypeCase::kLiteral: {
-		auto slit = sexpr.literal();
+		const auto &slit = sexpr.literal();
 		duckdb::Value dval;
 		switch (slit.literal_type_case()) {
 		case substrait::Expression_Literal::LiteralTypeCase::kFp64:
@@ -39,11 +37,20 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		case substrait::Expression_Literal::LiteralTypeCase::kString:
 			dval = duckdb::Value(slit.string());
 			break;
+		case substrait::Expression_Literal::LiteralTypeCase::kDecimal: {
+			const auto &substrait_decimal = slit.decimal();
+			// TODO: Support hugeint?
+			int64_t substrait_value = std::stoll(substrait_decimal.value());
+			dval = duckdb::Value::DECIMAL(substrait_value, substrait_decimal.precision(), substrait_decimal.scale());
+			break;
+		}
 
 		case substrait::Expression_Literal::LiteralTypeCase::kI32:
 			dval = duckdb::Value::INTEGER(slit.i32());
 			break;
-
+		case substrait::Expression_Literal::LiteralTypeCase::kI64:
+			dval = duckdb::Value::BIGINT(slit.i64());
+			break;
 		default:
 			throw runtime_error(to_string(slit.literal_type_case()));
 		}
@@ -111,10 +118,10 @@ unique_ptr<duckdb::ParsedExpression> SubstraitToDuckDB::TransformExpr(const subs
 		return duckdb::make_unique<duckdb::FunctionExpression>(function_name, move(children));
 	}
 	case substrait::Expression::RexTypeCase::kIfThen: {
-		auto scase = sexpr.if_then();
+		const auto &scase = sexpr.if_then();
 
 		auto dcase = duckdb::make_unique<duckdb::CaseExpression>();
-		for (auto sif : scase.ifs()) {
+		for (const auto &sif : scase.ifs()) {
 			duckdb::CaseCheck dif;
 			dif.when_expr = TransformExpr(sif.if_());
 			dif.then_expr = TransformExpr(sif.then());
@@ -141,19 +148,19 @@ duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::SortField
 	duckdb::OrderByNullType dnullorder;
 
 	switch (sordf.direction()) {
-	case substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_FIRST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_ASC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::SortField_SortDirection::SortField_SortDirection_ASC_NULLS_LAST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_ASC_NULLS_LAST:
 		dordertype = duckdb::OrderType::ASCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
-	case substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_FIRST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_DESC_NULLS_FIRST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_FIRST;
 		break;
-	case substrait::SortField_SortDirection::SortField_SortDirection_DESC_NULLS_LAST:
+	case substrait::SortField_SortDirection::SortField_SortDirection_SORT_DIRECTION_DESC_NULLS_LAST:
 		dordertype = duckdb::OrderType::DESCENDING;
 		dnullorder = duckdb::OrderByNullType::NULLS_LAST;
 		break;
@@ -165,17 +172,20 @@ duckdb::OrderByNode SubstraitToDuckDB::TransformOrder(const substrait::SortField
 }
 
 shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel &sop) {
-	switch (sop.RelType_case()) {
+	switch (sop.rel_type_case()) {
 	case substrait::Rel::RelTypeCase::kJoin: {
 		auto &sjoin = sop.join();
 
 		duckdb::JoinType djointype;
 		switch (sjoin.type()) {
-		case substrait::JoinRel::JoinType::JoinRel_JoinType_INNER:
+		case substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_INNER:
 			djointype = duckdb::JoinType::INNER;
 			break;
-		case substrait::JoinRel::JoinType::JoinRel_JoinType_LEFT:
+		case substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_LEFT:
 			djointype = duckdb::JoinType::LEFT;
+			break;
+		case substrait::JoinRel::JoinType::JoinRel_JoinType_JOIN_TYPE_RIGHT:
+			djointype = duckdb::JoinType::RIGHT;
 			break;
 		default:
 			throw runtime_error("Unsupported join type");
@@ -246,6 +256,7 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 			vector<string> aliases;
 			duckdb::idx_t expr_idx = 0;
 			for (auto &sproj : sget.projection().select().struct_items()) {
+				// FIXME how to get actually alias?
 				aliases.push_back("expr_" + to_string(expr_idx++));
 				// TODO make sure nothing else is in there
 				expressions.push_back(duckdb::make_unique<duckdb::PositionalReferenceExpression>(sproj.field() + 1));
@@ -264,10 +275,10 @@ shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformOp(const substrait::Rel
 		return duckdb::make_shared<duckdb::OrderRelation>(TransformOp(sop.sort().input()), move(order_nodes));
 	}
 	default:
-		throw runtime_error("Unsupported relation type " + to_string(sop.RelType_case()));
+		throw runtime_error("Unsupported relation type " + to_string(sop.rel_type_case()));
 	}
 }
 
-std::shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformPlan(const io::substrait::Plan &splan) {
+std::shared_ptr<duckdb::Relation> SubstraitToDuckDB::TransformPlan(const substrait::Plan &splan) {
 	return TransformOp(plan.relations(0).rel());
 }
