@@ -43,22 +43,20 @@ set(SUBSTRAIT_PATH substrait/gen/proto/cpp/substrait)
 
 set(SUBSTRAIT_SOURCES
     ${SUBSTRAIT_PATH}/capabilities.pb.cc
-    ${SUBSTRAIT_PATH}/expression.pb.cc
+    ${SUBSTRAIT_PATH}/algebra.pb.cc
     ${SUBSTRAIT_PATH}/function.pb.cc
     ${SUBSTRAIT_PATH}/parameterized_types.pb.cc
     ${SUBSTRAIT_PATH}/plan.pb.cc
-    ${SUBSTRAIT_PATH}/relations.pb.cc
     ${SUBSTRAIT_PATH}/type.pb.cc
     ${SUBSTRAIT_PATH}/type_expressions.pb.cc
     ${SUBSTRAIT_PATH}/extensions/extensions.pb.cc)
 
 set(SUBSTRAIT_HEADERS
     ${SUBSTRAIT_PATH}/capabilities.pb.h
-    ${SUBSTRAIT_PATH}/expression.pb.h
+    ${SUBSTRAIT_PATH}/algebra.pb.h
     ${SUBSTRAIT_PATH}/function.pb.h
     ${SUBSTRAIT_PATH}/parameterized_types.pb.h
     ${SUBSTRAIT_PATH}/plan.pb.h
-    ${SUBSTRAIT_PATH}/relations.pb.h
     ${SUBSTRAIT_PATH}/type.pb.h
     ${SUBSTRAIT_PATH}/type_expressions.pb.h
     ${SUBSTRAIT_PATH}/extensions/extensions.pb.h)

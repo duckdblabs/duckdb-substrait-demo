@@ -14,7 +14,7 @@
 #include "duckdb/function/table/table_scan.hpp"
 
 #include "substrait/plan.pb.h"
-#include "substrait/expression.pb.h"
+#include "substrait/algebra.pb.h"
 
 using namespace std;
 
