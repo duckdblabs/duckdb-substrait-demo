@@ -1,11 +1,10 @@
 #pragma once
 
-#include "substrait/expression.pb.h"
 #include <string>
 #include <unordered_map>
 #include <memory>
 #include "substrait/plan.pb.h"
-#include "substrait/relations.pb.h"
+#include "substrait/algebra.pb.h"
 using namespace std;
 
 namespace duckdb {

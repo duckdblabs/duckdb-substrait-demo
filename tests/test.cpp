@@ -31,11 +31,11 @@ bool debug = false;
 
 bool CompareQueryResults(QueryResult &actual_result, QueryResult &roundtrip_result) {
 	// actual_result compare the success state of the results
-	if (actual_result.success != roundtrip_result.success) {
+	if (actual_result.HasError() != roundtrip_result.HasError()) {
 		return false;
 	}
-	if (!actual_result.success) {
-		return actual_result.error == roundtrip_result.error;
+	if (actual_result.HasError()) {
+		return actual_result.GetErrorObject() == roundtrip_result.GetErrorObject();
 	}
 	// FIXME: How to name expression?
 	//	// compare names
